@@ -1,6 +1,7 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
 import { QolsysController, QolsysControllerError } from './QolsysController';
+import { TransportManager } from './transports/TransportManager';
 import { QolsysZone, QolsysZoneStatus, QolsysZoneType} from './QolsysZone';
 import { QolsysAlarmMode} from './QolsysPartition';
 import { HKSecurityPanel } from './HKSecurityPanel';
@@ -34,7 +35,10 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
   private PanelPort = 14999;
   private PanelSecureToken = '';
   private UserPinCode = '';
+  private TransportMode = 'c4';
+  private BridgeEndpoint = 'http://127.0.0.1:9123';
   public readonly Controller: QolsysController;
+  private readonly Transport: TransportManager;
 
   private Zones:Record<number, HKSensor> = {};
   private InitialRun = true;
@@ -73,13 +77,22 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
   ) {
 
     if(!this.CheckConfig()){
-      this.Controller = new QolsysController(this.PanelHost, this.PanelPort);
+      this.Transport = new TransportManager(this.log, 'c4', {
+        host: this.PanelHost,
+        port: this.PanelPort,
+      });
+      this.Controller = this.Transport.controller;
       return;
     }
 
-    this.Controller = new QolsysController(this.PanelHost, this.PanelPort);
-    this.Controller.SecureToken = this.PanelSecureToken;
-    this.Controller.UserPinCode = this.UserPinCode;
+    this.Transport = new TransportManager(this.log, this.TransportMode as 'c4' | 'pki', {
+      host: this.PanelHost,
+      port: this.PanelPort,
+      secureToken: this.PanelSecureToken,
+      userPinCode: this.UserPinCode,
+      bridgeEndpoint: this.BridgeEndpoint,
+    });
+    this.Controller = this.Transport.controller;
 
     this.api.on('didFinishLaunching', () => {
       this.discoverDevices();
@@ -97,6 +110,8 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
     const Port = this.config.Port;
     const SecureToken = this.config.SecureToken;
     const UserPinCode = this.config.UserPinCode;
+    const TransportMode = this.config.TransportMode;
+    const BridgeEndpoint = this.config.BridgeEndpoint;
 
     if(Host === undefined || Host === ''){
       this.log.error('Aborting plugin operation - Invalid Host: ' + Host);
@@ -196,6 +211,18 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
 
     if(this.config.MotionSensorMode !== undefined){
       this.MotionSensorMode = this.config.MotionSensorMode;
+    }
+
+    if(TransportMode !== undefined){
+      if(TransportMode !== 'c4' && TransportMode !== 'pki'){
+        this.log.warn('Invalid TransportMode value: ' + TransportMode + '. Falling back to c4.');
+      } else{
+        this.TransportMode = TransportMode;
+      }
+    }
+
+    if(BridgeEndpoint !== undefined && BridgeEndpoint !== ''){
+      this.BridgeEndpoint = BridgeEndpoint;
     }
 
     this.PanelHost = Host;
@@ -306,13 +333,13 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
 
         setTimeout(() => {
           this.log.info('Trying to reconnect ....');
-          this.Controller.Connect();
+          this.Transport.connect();
         }, 60000); // Try to reconnect every 60 sec
       }
     });
 
     // Start panel initialisation
-    this.Controller.Connect();
+    this.Transport.connect();
   }
 
   private CreateSensor(Zone:QolsysZone):boolean{

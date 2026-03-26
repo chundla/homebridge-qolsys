@@ -18,8 +18,11 @@ export class TransportManager {
     this.c4Transport = new C4Transport(config);
 
     if (mode === 'pki') {
-      this.activeTransport = new PkiBridgeTransport(this.log, config);
-      this.log.warn('TransportMode=pki selected, but PKI transport is not active yet. Falling back to c4 for runtime.');
+      this.activeTransport = new PkiBridgeTransport(this.log, {
+        ...config,
+        onBridgeSnapshot: (snapshot) => this.c4Transport.controller.ApplyBridgeSnapshot(snapshot),
+      });
+      this.log.warn('TransportMode=pki selected. C4 connection stays enabled for command compatibility.');
       this.log.warn('Configured BridgeEndpoint: ' + (config.bridgeEndpoint ?? 'unset'));
     } else {
       this.activeTransport = this.c4Transport;

@@ -12,6 +12,7 @@ import { QolsysPartition, QolsysAlarmMode } from './QolsysPartition';
 import { TypedEmitter } from 'tiny-typed-emitter';
 import tls = require('tls');
 import net = require('net');
+import { BridgeStateSnapshot } from './transports/bridgeTypes';
 
 interface PayloadJSON{
   event:string;
@@ -311,6 +312,56 @@ export class QolsysController extends TypedEmitter<QolsysControllerEvent> {
           this.emit('PrintDebugInfo', 'Received: ' + FormattedMessage);
           this.PartialMessage = FormattedMessage;
         }
+      }
+    }
+
+    ApplyBridgeSnapshot(snapshot: BridgeStateSnapshot){
+      this.InitialRun = true;
+
+      for (const part of snapshot.partitions){
+        let partition = this.Partitions[part.id];
+
+        if(partition === undefined){
+          partition = new QolsysPartition(part.id);
+          this.Partitions[part.id] = partition;
+        }
+
+        partition.PartitionName = part.name;
+        partition.SecureArm = part.secureArm;
+
+        if(partition.SetAlarmModeFromString(part.status) && (this.PanelReadyForOperation || this.InitialRun)){
+          this.emit('PartitionAlarmModeChange', partition);
+        }
+      }
+
+      for (const zoneData of snapshot.zones){
+        let zone = this.Zones[zoneData.id];
+
+        if(zone === undefined){
+          zone = new QolsysZone(zoneData.id);
+          this.Zones[zoneData.id] = zone;
+        }
+
+        zone.ZoneName = zoneData.name;
+        zone.PartitionId = zoneData.partitionId;
+        zone.SetZoneType(zoneData.type);
+
+        if(zone.SetZoneStatusFromString(zoneData.status) && (this.PanelReadyForOperation || this.InitialRun)){
+          this.emit('ZoneStatusChange', zone);
+        }
+      }
+
+      this.LastRefreshDate = new Date();
+      this.InitialRun = false;
+
+      if(!this.PanelReceivingNotifcation){
+        this.PanelReceivingNotifcation = true;
+        this.emit('PanelReceivingNotifiation', this.PanelReceivingNotifcation);
+      }
+
+      if(!this.PanelReadyForOperation){
+        this.PanelReadyForOperation = true;
+        this.emit('PanelReadyForOperation', this.PanelReadyForOperation);
       }
     }
 

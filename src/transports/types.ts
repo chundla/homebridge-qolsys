@@ -1,6 +1,7 @@
 export type QolsysTransportMode = 'c4' | 'pki';
 
-import { BridgeStateSnapshot } from './bridgeTypes';
+import { BridgeStateSnapshot } from './bridgeTypes.js';
+import { QolsysAlarmMode } from '../QolsysPartition.js';
 
 export interface QolsysTransportConfig {
   host: string;
@@ -11,8 +12,45 @@ export interface QolsysTransportConfig {
   onBridgeSnapshot?: (snapshot: BridgeStateSnapshot) => void;
 }
 
+export interface QolsysArmCommand {
+  armingType: QolsysAlarmMode;
+  partitionId: number;
+  delay: number;
+  bypass: boolean;
+  userCode?: string;
+}
+
+export type QolsysAutomationCommandType = 'light' | 'lock' | 'cover' | 'siren' | 'valve' | 'thermostat';
+
+export interface QolsysAutomationCommand {
+  type: QolsysAutomationCommandType;
+  action:
+    | 'light_on'
+    | 'light_off'
+    | 'light_level'
+    | 'lock'
+    | 'unlock'
+    | 'cover_open'
+    | 'cover_close'
+    | 'siren_on'
+    | 'siren_off'
+    | 'valve_open'
+    | 'valve_close'
+    | 'thermostat_mode'
+    | 'thermostat_fan_mode'
+    | 'thermostat_heat'
+    | 'thermostat_cool';
+  virtualNodeId: number;
+  endpoint: number;
+  value?: number;
+  mode?: string;
+  fanMode?: string;
+}
+
 export interface QolsysTransport {
   readonly mode: QolsysTransportMode;
   connect(): void;
   disconnect(): void;
+  sendArmCommand?: (command: QolsysArmCommand) => Promise<void>;
+  sendAutomationCommand?: (command: QolsysAutomationCommand) => Promise<void>;
 }

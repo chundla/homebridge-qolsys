@@ -1,5 +1,6 @@
 # Ignore compiled code
 dist
+dist/
 
 # ------------- Defaults ------------- #
 
@@ -118,3 +119,10 @@ dist
 .yarn/unplugged
 .yarn/build-state.yml
 .pnp.*
+
+# Integration plan
+INTEGRATION_PLAN.md
+
+# Bridge venv and configurations
+bridge/config.json
+bridge/.venv/

@@ -1,6 +1,6 @@
-import { QolsysZoneStatus} from './QolsysZone';
-import { HKSensorType, HBQolsysPanel} from './platform';
-import { HKAccessory } from './HKAccessory';
+import { QolsysZoneStatus} from './QolsysZone.js';
+import { HKSensorType, HBQolsysPanel} from './platform.js';
+import { HKAccessory } from './HKAccessory.js';
 
 export abstract class HKSensor extends HKAccessory{
   protected LastEvent: Date;

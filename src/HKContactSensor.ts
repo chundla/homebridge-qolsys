@@ -1,7 +1,7 @@
 import { Service } from 'homebridge';
-import { HKSensor } from './HKSensor';
-import { QolsysZoneStatus} from './QolsysZone';
-import { HKSensorType, HBQolsysPanel } from './platform';
+import { HKSensor } from './HKSensor.js';
+import { QolsysZoneStatus} from './QolsysZone.js';
+import { HKSensorType, HBQolsysPanel } from './platform.js';
 
 export class HKContactSensor extends HKSensor {
 

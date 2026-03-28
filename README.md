@@ -3,16 +3,18 @@
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 [![npm downloads](https://badgen.net/npm/dt/homebridge-qolsys)](https://www.npmjs.com/package/homebridge-qolsys)
 
-This plugin only supports the IQ Panel basic security features:
+This plugin supports two transport modes:
 
- | Feature  | Status |
- | ------ | ------ |
- | Arming partition (Arm-Away, Arm-Stay | Supported |
- | Disarming partition | Supported |
- | RF and wired sensor status | Supported |
- | Z-Wave accessory status and control | Not Supported  |
- | IQ Panel smart home features |  Not Supported |
- | Other Alarm.com features |  Not Supported |
+- **Control4 (legacy)**: basic security features only.
+- **PKI Bridge (recommended)**: full state sync + automation devices via `qolsys-controller`.
+
+| Feature | Control4 | PKI Bridge |
+| --- | --- | --- |
+| Arming/Disarming | ✅ | ✅ |
+| RF + wired sensors | ✅ | ✅ |
+| Z‑Wave automation devices (locks/lights/thermostat/cover/siren/valve) | ❌ | ✅ |
+| IQ Panel smart home features | ❌ | ✅ (via automation devices) |
+| Alarm.com cloud features | ❌ | ❌ |
  
 ## Supported Qolsys Panels
 | Panel  | Status | Notes |
@@ -37,15 +39,35 @@ This plugin only supports the IQ Panel basic security features:
 - Glass Break and Panel Glass Break
 - IQ Doorbell sensor
 
+## Supported Automation Devices (PKI Bridge)
+- Locks
+- Lights (on/off + level)
+- Thermostats (mode + setpoints + fan)
+- Covers/garage doors
+- Sirens
+- Valves
+
 ## Homebride Pluging Configuration
 ### General Parameters
 * `Host`:  Qolsys Panel IP address
 * `Port`:  Qolsys Panel Port number (defaults to 12345)
-* `Secure Token`: C4 Integration Secure Token 
+* `Secure Token`: C4 Integration Secure Token (Control4 mode)
 * `User Pin Code`: User security code
 * `Arm Away Exit Delay`: How much time users have to exit the location before the panel arms itself to Arm Away (0 sec or any number higher than your panel long exit delay (120 sec by default))
 * `Arm Stay Exit Delay`: How much time before the panel arms itself to Arm Stay (0 sec or any number higher than your panel long exit delay (120 sec by default))
-* `Force Arm`: Bypass open or faulted sensors when arming partition 
+* `Force Arm`: Bypass open or faulted sensors when arming partition
+
+### Transport Options
+* `TransportMode`: `c4` (legacy) or `pki` (bridge)
+* `BridgeEndpoint`: PKI bridge URL (default `http://127.0.0.1:9123`)
+* `BridgeAutoStart`: Auto-start the PKI bridge (creates venv, installs deps, runs bridge)
+* `BridgePythonPath`: Python executable for bridge (default `python3`)
+* `BridgeVenvPath`: Override venv location (optional)
+* `BridgeConfigPath`: Override bridge config path (optional)
+* `BridgePanelIp`: Panel IP for PKI pairing
+* `BridgePanelMac`: Panel MAC for PKI pairing
+* `BridgePluginIp`: IP of the Homebridge host running the bridge
+* `BridgeForceVenvRecreate`: Rebuild venv on next boot
 ### Motion Sensors
 As of version 0.4, Qolsys motion sensors can now be presented as motion or occupancy sensors with a user selectable option in Homebridge UI. The available options are:
 - Motion sensor only
@@ -56,6 +78,10 @@ As of version 0.4, Qolsys motion sensors can now be presented as motion or occup
 
 ## Qolsys Panel Configuration
 Prerequsite: On the latest Qolsys firmwaare 6 digit PIN codes must be enabled.
+
+### PKI Bridge Setup (required for automation)
+A local bridge service runs `qolsys-controller` and exposes an HTTP API for Homebridge.
+See `bridge/README.md` for setup, pairing, and config.
 - Settings
 - Advanced Settings
 - Enter Dealer Code (defaults to 2222)
@@ -96,6 +122,21 @@ Once Control 4 is enabled you have **10 minutes** to view the access token, conf
 | Off | Disarmed
 | Away | Arm Away, Exit Delay in config file
 | Home | Arm Stay, Exit Delay in config file
+
+### PKI Bridge (automation)
+When `TransportMode = pki`, Homebridge talks to a local bridge service that runs `qolsys-controller` and exposes:
+- `GET /health`
+- `GET /state`
+- `POST /command`
+
+This enables automation devices (locks, lights, thermostat, cover/garage, siren, valve) in HomeKit.
+
+If `BridgeAutoStart` is enabled, Homebridge will:
+- create a venv (once)
+- install Python deps (cached via a stamp)
+- start the bridge
+- prompt you to press **Pair** on the IQ Remote config page
+- update `config.json` automatically once paired (sets `random_mac`, flips `start_pairing=false`)
 
 ### Arming Limitations
 The Control4 interface on the IQ panels is intended as a local integration for Control4 remotes, as such this integration acts as a 'local' keypad. This means that when arming Away, by **default**, if no perimiter doors are opened the Auto Stay setting will trigger and the arming state will switch to Stay (Home). This setting can be disabled globally in the IQ panel, however disabling it increases the risk of triggereing alarms in the event Away is accidentaly selected while at home.

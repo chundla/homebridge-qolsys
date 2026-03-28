@@ -1,17 +1,31 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
-import { QolsysController, QolsysControllerError } from './QolsysController';
-import { TransportManager } from './transports/TransportManager';
-import { QolsysZone, QolsysZoneStatus, QolsysZoneType} from './QolsysZone';
-import { QolsysAlarmMode} from './QolsysPartition';
-import { HKSecurityPanel } from './HKSecurityPanel';
-import { HKContactSensor } from './HKContactSensor';
-import { HKLeakSensor } from './HKLeakSensor';
-import { HKSmokeSensor } from './HKSmokeSensor';
-import { HKCOSensor } from './HKCOSensor';
-import { HKDoorbellSensor } from './HKDoorbellSensor';
-import { HKSensor } from './HKSensor';
-import { HKMotionOccupancySensor } from './HKMotionOccupancySensor';
+import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import http from 'http';
+import https from 'https';
+import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
+import { QolsysController, QolsysControllerError } from './QolsysController.js';
+import { TransportManager } from './transports/TransportManager.js';
+import { QolsysAutomationCommand } from './transports/types.js';
+import { QolsysZone, QolsysZoneStatus, QolsysZoneType} from './QolsysZone.js';
+import { QolsysAlarmMode} from './QolsysPartition.js';
+import { HKSecurityPanel } from './HKSecurityPanel.js';
+import { HKContactSensor } from './HKContactSensor.js';
+import { HKLeakSensor } from './HKLeakSensor.js';
+import { HKSmokeSensor } from './HKSmokeSensor.js';
+import { HKCOSensor } from './HKCOSensor.js';
+import { HKDoorbellSensor } from './HKDoorbellSensor.js';
+import { HKSensor } from './HKSensor.js';
+import { HKMotionOccupancySensor } from './HKMotionOccupancySensor.js';
+import { HKAutomationLight } from './HKAutomationLight.js';
+import { HKAutomationLock } from './HKAutomationLock.js';
+import { HKAutomationCover } from './HKAutomationCover.js';
+import { HKAutomationSiren } from './HKAutomationSiren.js';
+import { HKAutomationValve } from './HKAutomationValve.js';
+import { HKAutomationThermostat } from './HKAutomationThermostat.js';
+import { BridgeAutomationDeviceSnapshot, BridgeAutomationServiceSnapshot } from './transports/bridgeTypes.js';
 
 export enum HKSensorType {
   MotionSensor = 'MotionSensor',
@@ -23,6 +37,11 @@ export enum HKSensorType {
   MotionOccupancySensor = 'MotionOccupancySensor',
   DoorbellSensor = 'DoorbellSensor'
 }
+
+type HKAutomationAccessory = {
+  Accessory: PlatformAccessory;
+  UpdateFromService: (service: BridgeAutomationServiceSnapshot) => void;
+};
 
 export class HBQolsysPanel implements DynamicPlatformPlugin {
   public readonly Service: typeof Service = this.api.hap.Service;
@@ -37,10 +56,24 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
   private UserPinCode = '';
   private TransportMode = 'c4';
   private BridgeEndpoint = 'http://127.0.0.1:9123';
+  private BridgeAutoStart = false;
+  private BridgePythonPath = 'python3';
+  private BridgeVenvPath = '';
+  private BridgeConfigPath = '';
+  private BridgeForceVenvRecreate = false;
+  private BridgePanelIp = '';
+  private BridgePanelMac = '';
+  private BridgePluginIp = '';
+  private BridgeProcess?: ChildProcessWithoutNullStreams;
+  private BridgeDepsReady = false;
+  private BridgePairingTimer?: NodeJS.Timeout;
+  private BridgePairingLastLog?: number;
+  private BridgeHealthTimer?: NodeJS.Timeout;
   public readonly Controller: QolsysController;
   private readonly Transport: TransportManager;
 
   private Zones:Record<number, HKSensor> = {};
+  private AutomationAccessories: Record<string, HKAutomationAccessory | undefined> = {};
   private InitialRun = true;
   private ReceivingPanelNotification = false;
 
@@ -57,6 +90,12 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
   private ShowBluetooth = false;
   private ShowGlassBreak = false;
   private ShowTakeover = false;
+  private ShowAutomationLocks = true;
+  private ShowAutomationLights = true;
+  private ShowAutomationThermostats = true;
+  private ShowAutomationCovers = true;
+  private ShowAutomationSirens = true;
+  private ShowAutomationValves = true;
   private LogPartition = true;
   private LogZone = false;
   private LogDebug = false;
@@ -177,8 +216,64 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
       this.ShowFreeze = this.config.ShowFreeze;
     }
 
+    if(this.config.ShowAutomationLocks !== undefined){
+      this.ShowAutomationLocks = this.config.ShowAutomationLocks;
+    }
+
+    if(this.config.ShowAutomationLights !== undefined){
+      this.ShowAutomationLights = this.config.ShowAutomationLights;
+    }
+
+    if(this.config.ShowAutomationThermostats !== undefined){
+      this.ShowAutomationThermostats = this.config.ShowAutomationThermostats;
+    }
+
+    if(this.config.ShowAutomationCovers !== undefined){
+      this.ShowAutomationCovers = this.config.ShowAutomationCovers;
+    }
+
+    if(this.config.ShowAutomationSirens !== undefined){
+      this.ShowAutomationSirens = this.config.ShowAutomationSirens;
+    }
+
+    if(this.config.ShowAutomationValves !== undefined){
+      this.ShowAutomationValves = this.config.ShowAutomationValves;
+    }
+
     if(this.config.LogPartition !== undefined){
       this.LogPartition = this.config.LogPartition;
+    }
+
+    if(this.config.BridgeAutoStart !== undefined){
+      this.BridgeAutoStart = this.config.BridgeAutoStart;
+    }
+
+    if(this.config.BridgePythonPath !== undefined && this.config.BridgePythonPath !== ''){
+      this.BridgePythonPath = this.config.BridgePythonPath;
+    }
+
+    if(this.config.BridgeVenvPath !== undefined){
+      this.BridgeVenvPath = this.config.BridgeVenvPath;
+    }
+
+    if(this.config.BridgeConfigPath !== undefined){
+      this.BridgeConfigPath = this.config.BridgeConfigPath;
+    }
+
+    if(this.config.BridgeForceVenvRecreate !== undefined){
+      this.BridgeForceVenvRecreate = this.config.BridgeForceVenvRecreate;
+    }
+
+    if(this.config.BridgePanelIp !== undefined){
+      this.BridgePanelIp = this.config.BridgePanelIp;
+    }
+
+    if(this.config.BridgePanelMac !== undefined){
+      this.BridgePanelMac = this.config.BridgePanelMac;
+    }
+
+    if(this.config.BridgePluginIp !== undefined){
+      this.BridgePluginIp = this.config.BridgePluginIp;
     }
 
     if(this.config.LogZone !== undefined){
@@ -254,6 +349,104 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
     }
   }
 
+  private DiscoverAutomationDevices(){
+    const devices = Object.values(this.Controller.GetAutomationDevices());
+    this.UpdateAutomationDevices(devices);
+  }
+
+  private UpdateAutomationDevices(devices: BridgeAutomationDeviceSnapshot[]){
+    const seen = new Set<string>();
+
+    for (const device of devices){
+      if (!Array.isArray(device.services)){
+        continue;
+      }
+
+      for (const service of device.services){
+        const key = this.AutomationKey(device, service);
+        let accessory = this.AutomationAccessories[key];
+        if (!accessory){
+          accessory = this.CreateAutomationAccessory(device, service);
+        }
+        if (accessory){
+          accessory.UpdateFromService(service);
+          seen.add(key);
+        }
+      }
+    }
+
+    for (const key of Object.keys(this.AutomationAccessories)){
+      if (!seen.has(key)){
+        const accessory = this.AutomationAccessories[key];
+        if (accessory){
+          this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory.Accessory]);
+        }
+        delete this.AutomationAccessories[key];
+      }
+    }
+  }
+
+  private AutomationKey(device: BridgeAutomationDeviceSnapshot, service: BridgeAutomationServiceSnapshot): string {
+    return `${device.virtualNodeId}-${service.type}-${service.endpoint ?? 0}`;
+  }
+
+  private CreateAutomationAccessory(
+    device: BridgeAutomationDeviceSnapshot,
+    service: BridgeAutomationServiceSnapshot,
+  ): HKAutomationAccessory | undefined {
+    const key = this.AutomationKey(device, service);
+
+    let accessory: HKAutomationAccessory | undefined;
+
+    switch(service.type){
+      case 'light':
+        if (!this.ShowAutomationLights){
+          return undefined;
+        }
+        accessory = new HKAutomationLight(this, device, service);
+        break;
+      case 'lock':
+        if (!this.ShowAutomationLocks){
+          return undefined;
+        }
+        accessory = new HKAutomationLock(this, device, service);
+        break;
+      case 'cover':
+        if (!this.ShowAutomationCovers){
+          return undefined;
+        }
+        accessory = new HKAutomationCover(this, device, service);
+        break;
+      case 'siren':
+        if (!this.ShowAutomationSirens){
+          return undefined;
+        }
+        accessory = new HKAutomationSiren(this, device, service);
+        break;
+      case 'valve':
+        if (!this.ShowAutomationValves){
+          return undefined;
+        }
+        accessory = new HKAutomationValve(this, device, service);
+        break;
+      case 'thermostat':
+        if (!this.ShowAutomationThermostats){
+          return undefined;
+        }
+        accessory = new HKAutomationThermostat(this, device, service);
+        break;
+      default:
+        this.log.debug(`Automation device ${device.name} has unsupported service type ${service.type}`);
+        return undefined;
+    }
+
+    if (accessory){
+      this.AutomationAccessories[key] = accessory;
+    }
+
+    return accessory;
+  }
+
   private DeviceCacheCleanUp(){
     // Do some cleanup of point that have been restored and are not in config file anymore
     for(let i = 0; i < this.accessories.length;i++){
@@ -275,6 +468,7 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
         this.log.info('-----------------------------------------');
         this.DiscoverPartitions();
         this.DiscoverZones();
+        this.DiscoverAutomationDevices();
         this.DeviceCacheCleanUp();
         this.InitialRun = false;
       }
@@ -308,6 +502,10 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
       }
     });
 
+    this.Controller.on('AutomationDevicesUpdated', (devices) => {
+      this.UpdateAutomationDevices(devices);
+    });
+
     this.Controller.on('PartitionAlarmModeChange', (Partition)=>{
       const msg = 'Partition'+ Partition.PartitionId + '(' + Partition.PartitionName +'): ' + QolsysAlarmMode[Partition.PartitionStatus];
       if(this.LogPartition){
@@ -339,7 +537,326 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
     });
 
     // Start panel initialisation
+    if (this.TransportMode === 'pki' && this.BridgeAutoStart) {
+      this.ensureBridgeRunning();
+      this.waitForBridgeHealthThenConnect();
+      return;
+    }
+
+    this.ensureBridgeRunning();
     this.Transport.connect();
+  }
+
+  public SendArmCommand(armingType: QolsysAlarmMode, partitionId: number, delay: number, bypass: boolean): void {
+    void this.Transport.sendArmCommand({
+      armingType,
+      partitionId,
+      delay,
+      bypass,
+      userCode: this.UserPinCode,
+    });
+  }
+
+  public SendAutomationCommand(command: QolsysAutomationCommand): void {
+    void this.Transport.sendAutomationCommand(command);
+  }
+
+  private ensureBridgeRunning(): void {
+    if (this.TransportMode !== 'pki' || !this.BridgeAutoStart) {
+      return;
+    }
+
+    if (this.BridgeProcess) {
+      return;
+    }
+
+    const storagePath = this.api.user.storagePath();
+    const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const bridgeDir = path.resolve(rootDir, 'bridge');
+    const venvPath = this.BridgeVenvPath && this.BridgeVenvPath.length > 0
+      ? this.BridgeVenvPath
+      : path.resolve(storagePath, 'qolsys-bridge', '.venv');
+    const configPath = this.BridgeConfigPath && this.BridgeConfigPath.length > 0
+      ? this.BridgeConfigPath
+      : path.resolve(storagePath, 'qolsys-bridge', 'config.json');
+    const pythonExecutable = this.BridgePythonPath || 'python3';
+    const venvPython = path.resolve(venvPath, 'bin', 'python');
+    const requirementsPath = path.resolve(bridgeDir, 'requirements.txt');
+    const appPath = path.resolve(bridgeDir, 'app.py');
+
+    try {
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    } catch (error) {
+      this.log.error('Failed to create bridge config directory: ' + (error as Error).message);
+      return;
+    }
+
+    if (!fs.existsSync(configPath)) {
+      this.log.warn('BridgeAutoStart is enabled but config.json is missing: ' + configPath);
+      if (!this.writeBridgeConfig(configPath)) {
+        this.log.warn('Create the bridge config file first; auto-start skipped.');
+        return;
+      }
+      this.log.info('Created bridge config template at ' + configPath);
+    }
+
+    if (this.BridgeForceVenvRecreate && fs.existsSync(venvPath)) {
+      this.log.warn('BridgeForceVenvRecreate enabled. Removing venv at ' + venvPath);
+      fs.rmSync(venvPath, { recursive: true, force: true });
+    }
+
+    if (!fs.existsSync(venvPython)) {
+      this.log.info('Creating bridge venv at ' + venvPath);
+      const create = spawn(pythonExecutable, ['-m', 'venv', venvPath]);
+      create.on('exit', (code) => {
+        if (code !== 0) {
+          this.log.error('Failed to create bridge venv (exit ' + code + ')');
+          return;
+        }
+        this.installBridgeDeps(venvPython, requirementsPath, appPath, configPath, venvPath);
+      });
+      return;
+    }
+
+    if (this.BridgeDepsReady) {
+      this.startBridgeProcess(venvPython, appPath, configPath);
+      return;
+    }
+
+    if (this.isBridgeDepsUpToDate(venvPath, requirementsPath)) {
+      this.BridgeDepsReady = true;
+      this.startBridgeProcess(venvPython, appPath, configPath);
+      return;
+    }
+
+    this.installBridgeDeps(venvPython, requirementsPath, appPath, configPath, venvPath);
+  }
+
+  private installBridgeDeps(venvPython: string, requirementsPath: string, appPath: string, configPath: string, venvPath: string): void {
+    this.log.info('Ensuring bridge dependencies are installed.');
+    const pip = spawn(venvPython, ['-m', 'pip', 'install', '-r', requirementsPath]);
+    pip.stdout.on('data', (data) => this.log.debug('[bridge][pip] ' + data.toString().trim()));
+    pip.stderr.on('data', (data) => this.log.warn('[bridge][pip] ' + data.toString().trim()));
+    pip.on('exit', (code) => {
+      if (code !== 0) {
+        this.log.error('Bridge dependency install failed (exit ' + code + ')');
+        return;
+      }
+      this.BridgeDepsReady = true;
+      this.writeBridgeDepsStamp(venvPath, requirementsPath);
+      this.startBridgeProcess(venvPython, appPath, configPath);
+    });
+  }
+
+  private bridgeStampPath(venvPath: string): string {
+    return path.resolve(venvPath, '.deps-stamp');
+  }
+
+  private writeBridgeConfig(configPath: string): boolean {
+    try {
+      const payload = {
+        panel_ip: this.BridgePanelIp || this.PanelHost || '',
+        panel_mac: this.BridgePanelMac || '',
+        random_mac: '',
+        config_dir: path.dirname(configPath),
+        plugin_ip: this.BridgePluginIp || '',
+        auto_discover_pki: false,
+        start_pairing: true,
+        check_user_code_on_arm: false,
+        check_user_code_on_disarm: false,
+        log_mqtt_messages: false,
+        http_host: '127.0.0.1',
+        http_port: 9123,
+      };
+      fs.writeFileSync(configPath, JSON.stringify(payload, null, 2), 'utf-8');
+      return true;
+    } catch (error) {
+      this.log.error('Failed to write bridge config: ' + (error as Error).message);
+      return false;
+    }
+  }
+
+  private isBridgeDepsUpToDate(venvPath: string, requirementsPath: string): boolean {
+    try {
+      const stampPath = this.bridgeStampPath(venvPath);
+      if (!fs.existsSync(stampPath)) {
+        return false;
+      }
+      const stamp = fs.readFileSync(stampPath, 'utf-8').trim();
+      const requirements = fs.readFileSync(requirementsPath, 'utf-8').trim();
+      return stamp === requirements;
+    } catch (error) {
+      this.log.warn('Bridge dependency stamp check failed: ' + (error as Error).message);
+      return false;
+    }
+  }
+
+  private writeBridgeDepsStamp(venvPath: string, requirementsPath: string): void {
+    try {
+      const stampPath = this.bridgeStampPath(venvPath);
+      const requirements = fs.readFileSync(requirementsPath, 'utf-8').trim();
+      fs.writeFileSync(stampPath, requirements, 'utf-8');
+    } catch (error) {
+      this.log.warn('Failed to write bridge dependency stamp: ' + (error as Error).message);
+    }
+  }
+
+  private startBridgeProcess(venvPython: string, appPath: string, configPath: string): void {
+    this.log.info('Starting PKI bridge process...');
+    this.BridgeProcess = spawn(venvPython, [appPath, '--config', configPath], { env: process.env });
+
+    this.BridgeProcess.stdout.on('data', (data) => this.log.info('[bridge] ' + data.toString().trim()));
+    this.BridgeProcess.stderr.on('data', (data) => this.log.warn('[bridge] ' + data.toString().trim()));
+
+    this.BridgeProcess.on('exit', (code) => {
+      this.log.warn('PKI bridge exited (code ' + code + ').');
+      this.BridgeProcess = undefined;
+      if (this.BridgePairingTimer) {
+        clearInterval(this.BridgePairingTimer);
+        this.BridgePairingTimer = undefined;
+      }
+      if (this.BridgeHealthTimer) {
+        clearInterval(this.BridgeHealthTimer);
+        this.BridgeHealthTimer = undefined;
+      }
+    });
+
+    this.api.on('shutdown', () => {
+      if (this.BridgeProcess) {
+        this.log.info('Stopping PKI bridge process...');
+        this.BridgeProcess.kill('SIGTERM');
+        this.BridgeProcess = undefined;
+      }
+      if (this.BridgePairingTimer) {
+        clearInterval(this.BridgePairingTimer);
+        this.BridgePairingTimer = undefined;
+      }
+      if (this.BridgeHealthTimer) {
+        clearInterval(this.BridgeHealthTimer);
+        this.BridgeHealthTimer = undefined;
+      }
+    });
+
+    this.startBridgePairingMonitor(configPath);
+  }
+
+  private startBridgePairingMonitor(configPath: string): void {
+    if (this.BridgePairingTimer) {
+      return;
+    }
+
+    this.BridgePairingTimer = setInterval(() => {
+      this.checkBridgePairing(configPath);
+    }, 15000);
+
+    this.checkBridgePairing(configPath);
+  }
+
+  private waitForBridgeHealthThenConnect(): void {
+    if (this.BridgeHealthTimer) {
+      return;
+    }
+
+    this.BridgeHealthTimer = setInterval(() => {
+      this.checkBridgeHealth(() => {
+        if (this.BridgeHealthTimer) {
+          clearInterval(this.BridgeHealthTimer);
+          this.BridgeHealthTimer = undefined;
+        }
+        this.Transport.connect();
+      });
+    }, 5000);
+
+    this.checkBridgeHealth(() => {
+      if (this.BridgeHealthTimer) {
+        clearInterval(this.BridgeHealthTimer);
+        this.BridgeHealthTimer = undefined;
+      }
+      this.Transport.connect();
+    });
+  }
+
+  private checkBridgeHealth(onHealthy: () => void): void {
+    const healthUrl = new URL('/health', this.BridgeEndpoint);
+    const client = healthUrl.protocol === 'https:' ? https : http;
+
+    const req = client.get(healthUrl.toString(), (res) => {
+      let raw = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        raw += chunk;
+      });
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          return;
+        }
+        try {
+          const payload = JSON.parse(raw);
+          if (payload && payload.connected) {
+            onHealthy();
+          }
+        } catch (error) {
+          // ignore
+        }
+      });
+    });
+
+    req.on('error', () => {
+      // ignore
+    });
+  }
+
+  private checkBridgePairing(configPath: string): void {
+    let config: any;
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch (error) {
+      this.log.warn('Bridge pairing check failed to read config: ' + (error as Error).message);
+      return;
+    }
+
+    if (!config.start_pairing) {
+      return;
+    }
+
+    const now = Date.now();
+    if (!this.BridgePairingLastLog || now - this.BridgePairingLastLog > 60000) {
+      this.log.info('PKI pairing required — press Pair on the IQ Remote config page.');
+      this.BridgePairingLastLog = now;
+    }
+
+    const healthUrl = new URL('/health', this.BridgeEndpoint);
+    const client = healthUrl.protocol === 'https:' ? https : http;
+
+    const req = client.get(healthUrl.toString(), (res) => {
+      let raw = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        raw += chunk;
+      });
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          return;
+        }
+        try {
+          const payload = JSON.parse(raw);
+          if (payload && payload.paired) {
+            if (payload.random_mac) {
+              config.random_mac = payload.random_mac;
+            }
+            config.start_pairing = false;
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+            this.log.info('PKI pairing complete. Bridge config updated.');
+          }
+        } catch (error) {
+          this.log.warn('Bridge pairing check failed to parse health response.');
+        }
+      });
+    });
+
+    req.on('error', () => {
+      // ignore
+    });
   }
 
   private CreateSensor(Zone:QolsysZone):boolean{

@@ -1,8 +1,14 @@
 import { Logger } from 'homebridge';
-import { QolsysController } from '../QolsysController';
-import { C4Transport } from './C4Transport';
-import { PkiBridgeTransport } from './PkiBridgeTransport';
-import { QolsysTransport, QolsysTransportConfig, QolsysTransportMode } from './types';
+import { QolsysController } from '../QolsysController.js';
+import { C4Transport } from './C4Transport.js';
+import { PkiBridgeTransport } from './PkiBridgeTransport.js';
+import {
+  QolsysArmCommand,
+  QolsysAutomationCommand,
+  QolsysTransport,
+  QolsysTransportConfig,
+  QolsysTransportMode,
+} from './types.js';
 
 export class TransportManager {
   private readonly selectedMode: QolsysTransportMode;
@@ -36,6 +42,29 @@ export class TransportManager {
 
   get mode(): QolsysTransportMode {
     return this.selectedMode;
+  }
+
+  async sendArmCommand(command: QolsysArmCommand): Promise<void> {
+    if (this.selectedMode === 'pki' && this.activeTransport.sendArmCommand) {
+      await this.activeTransport.sendArmCommand(command);
+      return;
+    }
+
+    this.c4Transport.controller.SendArmCommand(
+      command.armingType,
+      command.partitionId,
+      command.delay,
+      command.bypass,
+    );
+  }
+
+  async sendAutomationCommand(command: QolsysAutomationCommand): Promise<void> {
+    if (this.selectedMode === 'pki' && this.activeTransport.sendAutomationCommand) {
+      await this.activeTransport.sendAutomationCommand(command);
+      return;
+    }
+
+    this.log.warn('Automation commands require PKI bridge transport. Ignoring command: ' + command.action);
   }
 
   connect(): void {

@@ -1,0 +1,6 @@
+aiohttp==3.9.5
+qolsys-controller==0.4.34
+aiofiles==25.1.0
+aiomqtt==2.5.1
+zeroconf==0.148.0
+cryptography==46.0.6

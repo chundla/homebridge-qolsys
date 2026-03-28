@@ -1,7 +1,7 @@
 import { Service} from 'homebridge';
-import { QolsysAlarmMode} from './QolsysPartition';
-import { HBQolsysPanel } from './platform';
-import { HKAccessory } from './HKAccessory';
+import { QolsysAlarmMode} from './QolsysPartition.js';
+import { HBQolsysPanel } from './platform.js';
+import { HKAccessory } from './HKAccessory.js';
 
 export class HKSecurityPanel extends HKAccessory {
   private service: Service;
@@ -70,27 +70,27 @@ export class HKSecurityPanel extends HKAccessory {
 
     switch(value){
       case this.platform.Characteristic.SecuritySystemTargetState.DISARM:{
-        this.platform.Controller.SendArmCommand(QolsysAlarmMode.DISARM, this.PartitionId, 0, true);
+        this.platform.SendArmCommand(QolsysAlarmMode.DISARM, this.PartitionId, 0, true);
         break;
       }
 
       case this.platform.Characteristic.SecuritySystemTargetState.AWAY_ARM:{
         const AwayExitDelay = this.platform.AwayExitDelay;
         const Bypass = this.platform.ForceArm;
-        this.platform.Controller.SendArmCommand(QolsysAlarmMode.ARM_AWAY, this.PartitionId, AwayExitDelay, Bypass);
+        this.platform.SendArmCommand(QolsysAlarmMode.ARM_AWAY, this.PartitionId, AwayExitDelay, Bypass);
         break;
       }
 
       case this.platform.Characteristic.SecuritySystemTargetState.NIGHT_ARM:{
         const Bypass = this.platform.ForceArm;
-        this.platform.Controller.SendArmCommand(QolsysAlarmMode.ARM_STAY, this.PartitionId, 0, Bypass);
+        this.platform.SendArmCommand(QolsysAlarmMode.ARM_STAY, this.PartitionId, 0, Bypass);
         break;
       }
 
       case this.platform.Characteristic.SecuritySystemTargetState.STAY_ARM:{
         const HomeExitDelay = this.platform.HomeExitDelay;
         const Bypass = this.platform.ForceArm;
-        this.platform.Controller.SendArmCommand(QolsysAlarmMode.ARM_STAY, this.PartitionId, HomeExitDelay, Bypass);
+        this.platform.SendArmCommand(QolsysAlarmMode.ARM_STAY, this.PartitionId, HomeExitDelay, Bypass);
         break;
       }
     }

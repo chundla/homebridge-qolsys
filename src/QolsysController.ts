@@ -7,12 +7,12 @@
 *
 */
 
-import { QolsysZone } from './QolsysZone';
-import { QolsysPartition, QolsysAlarmMode } from './QolsysPartition';
+import { QolsysZone } from './QolsysZone.js';
+import { QolsysPartition, QolsysAlarmMode } from './QolsysPartition.js';
 import { TypedEmitter } from 'tiny-typed-emitter';
-import tls = require('tls');
-import net = require('net');
-import { BridgeStateSnapshot } from './transports/bridgeTypes';
+import tls from 'tls';
+import net from 'net';
+import { BridgeAutomationDeviceSnapshot, BridgeStateSnapshot } from './transports/bridgeTypes.js';
 
 interface PayloadJSON{
   event:string;
@@ -68,11 +68,10 @@ export interface QolsysControllerEvent {
   'ZoneStatusChange': (Zone: QolsysZone) => void;
   'PartitionAlarmModeChange':(Partition: QolsysPartition) => void;
   'PrintDebugInfo':(DebugString: string)=> void;
+  'AutomationDevicesUpdated': (devices: BridgeAutomationDeviceSnapshot[]) => void;
 }
 
 export class QolsysController extends TypedEmitter<QolsysControllerEvent> {
-    Util = require('util');
-
     private Host: string;
     private Port: number;
     SecureToken = '';
@@ -84,6 +83,7 @@ export class QolsysController extends TypedEmitter<QolsysControllerEvent> {
 
     private Partitions:Record<number, QolsysPartition> = {};
     private Zones:Record<number, QolsysZone> = {};
+    private AutomationDevices:Record<number, BridgeAutomationDeviceSnapshot> = {};
 
     private PanelReadyForOperation = false;
     private PanelReceivingNotifcation = false;
@@ -103,6 +103,10 @@ export class QolsysController extends TypedEmitter<QolsysControllerEvent> {
 
     GetZones(){
       return this.Zones;
+    }
+
+    GetAutomationDevices(){
+      return this.AutomationDevices;
     }
 
     Connect(){
@@ -349,6 +353,14 @@ export class QolsysController extends TypedEmitter<QolsysControllerEvent> {
         if(zone.SetZoneStatusFromString(zoneData.status) && (this.PanelReadyForOperation || this.InitialRun)){
           this.emit('ZoneStatusChange', zone);
         }
+      }
+
+      if (snapshot.automationDevices) {
+        this.AutomationDevices = {};
+        for (const device of snapshot.automationDevices) {
+          this.AutomationDevices[device.virtualNodeId] = device;
+        }
+        this.emit('AutomationDevicesUpdated', Object.values(this.AutomationDevices));
       }
 
       this.LastRefreshDate = new Date();

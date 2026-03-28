@@ -78,10 +78,12 @@ Cons:
 
 ## Immediate Next Tasks
 
-1. Add new config schema fields for transport and bridge endpoint/runtime.
-2. Add TypeScript interfaces for normalized panel/device events.
-3. Scaffold bridge client and event dispatcher in `src/`.
-4. Keep existing C4 behavior untouched when `transportMode = c4`.
+1. Add new config schema fields for transport and bridge endpoint/runtime. ✅
+2. Add TypeScript interfaces for normalized panel/device events. ✅ (BridgeStateSnapshot)
+3. Scaffold bridge client and event dispatcher in `src/`. ✅ (PkiBridgeTransport + TransportManager)
+4. Build PKI bridge service (Python qolsys-controller + HTTP API). ✅ (bridge/app.py)
+5. Define automation device + command payloads for bridge API.
+6. Keep existing C4 behavior untouched when `transportMode = c4`. ✅
 
 ## Testing Strategy
 

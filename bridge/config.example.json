@@ -1,0 +1,14 @@
+{
+  "panel_ip": "192.168.1.50",
+  "panel_mac": "AA:BB:CC:DD:EE:FF",
+  "random_mac": "11:22:33:44:55:66",
+  "config_dir": "/var/lib/qolsys-bridge",
+  "plugin_ip": "192.168.1.10",
+  "auto_discover_pki": false,
+  "start_pairing": false,
+  "check_user_code_on_arm": false,
+  "check_user_code_on_disarm": false,
+  "log_mqtt_messages": false,
+  "http_host": "0.0.0.0",
+  "http_port": 9123
+}

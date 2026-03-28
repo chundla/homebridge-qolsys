@@ -52,6 +52,70 @@
           "functionBody": "return model.TransportMode === 'pki';"
         }
       },
+      "BridgeAutoStart": {
+        "title": "Auto-start PKI Bridge",
+        "type": "boolean",
+        "default": false,
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki';"
+        }
+      },
+      "BridgePythonPath": {
+        "title": "PKI Bridge Python Executable",
+        "type": "string",
+        "default": "python3",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
+        }
+      },
+      "BridgeVenvPath": {
+        "title": "PKI Bridge Virtualenv Path",
+        "type": "string",
+        "default": "",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
+        }
+      },
+      "BridgeConfigPath": {
+        "title": "PKI Bridge Config Path",
+        "type": "string",
+        "default": "",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
+        }
+      },
+      "BridgePanelIp": {
+        "title": "PKI Panel IP",
+        "type": "string",
+        "default": "",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
+        }
+      },
+      "BridgePanelMac": {
+        "title": "PKI Panel MAC",
+        "type": "string",
+        "default": "",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
+        }
+      },
+      "BridgePluginIp": {
+        "title": "PKI Bridge Host IP",
+        "type": "string",
+        "default": "",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
+        }
+      },
+      "BridgeForceVenvRecreate": {
+        "title": "PKI Bridge Force Venv Recreate",
+        "type": "boolean",
+        "default": false,
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
+        }
+      },
       "ForceArm":{
         "title":"Force Arm",
         "type": "boolean",
@@ -149,6 +213,54 @@
         "title": "Show Qolsys panel debug information",
         "default": false
       },
+      "ShowAutomationLocks": {
+        "type": "boolean",
+        "title": "Show Automation Locks",
+        "default": true,
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki';"
+        }
+      },
+      "ShowAutomationLights": {
+        "type": "boolean",
+        "title": "Show Automation Lights",
+        "default": true,
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki';"
+        }
+      },
+      "ShowAutomationThermostats": {
+        "type": "boolean",
+        "title": "Show Automation Thermostats",
+        "default": true,
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki';"
+        }
+      },
+      "ShowAutomationCovers": {
+        "type": "boolean",
+        "title": "Show Automation Covers",
+        "default": true,
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki';"
+        }
+      },
+      "ShowAutomationSirens": {
+        "type": "boolean",
+        "title": "Show Automation Sirens",
+        "default": true,
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki';"
+        }
+      },
+      "ShowAutomationValves": {
+        "type": "boolean",
+        "title": "Show Automation Valves",
+        "default": true,
+        "condition": {
+          "functionBody": "return model.TransportMode === 'pki';"
+        }
+      },
       "MotionSensorMode": {
         "title": "Homekit Sensor Mode",
         "type": "string",
@@ -218,7 +330,15 @@
           "expanded": true,
           "items": [
             "TransportMode",
-            "BridgeEndpoint"
+            "BridgeEndpoint",
+            "BridgeAutoStart",
+            "BridgePythonPath",
+            "BridgeVenvPath",
+            "BridgeConfigPath",
+            "BridgePanelIp",
+            "BridgePanelMac",
+            "BridgePluginIp",
+            "BridgeForceVenvRecreate"
           ]
         },
         {
@@ -279,6 +399,12 @@
           "expandable": true,
           "expanded": true,
           "items": [
+            "ShowAutomationLocks",
+            "ShowAutomationLights",
+            "ShowAutomationThermostats",
+            "ShowAutomationCovers",
+            "ShowAutomationSirens",
+            "ShowAutomationValves"
           ]
         }]
     }

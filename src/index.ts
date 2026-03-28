@@ -1,7 +1,7 @@
 import { API } from 'homebridge';
-import { PLATFORM_NAME } from './settings';
-import { HBQolsysPanel } from './platform';
+import { PLATFORM_NAME } from './settings.js';
+import { HBQolsysPanel } from './platform.js';
 
-export = (api: API) => {
+export default (api: API) => {
   api.registerPlatform(PLATFORM_NAME, HBQolsysPanel);
 };

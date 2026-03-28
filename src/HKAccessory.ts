@@ -1,6 +1,6 @@
 import { PlatformAccessory, Service, WithUUID } from 'homebridge';
-import { HBQolsysPanel } from './platform';
-import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
+import { HBQolsysPanel } from './platform.js';
+import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 
 
 export abstract class HKAccessory {

@@ -1,5 +1,5 @@
-import { QolsysController } from '../QolsysController';
-import { QolsysTransport, QolsysTransportConfig } from './types';
+import { QolsysController } from '../QolsysController.js';
+import { QolsysTransport, QolsysTransportConfig } from './types.js';
 
 export class C4Transport implements QolsysTransport {
   public readonly mode = 'c4' as const;

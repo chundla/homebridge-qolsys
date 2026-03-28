@@ -71,6 +71,7 @@
       "BridgeVenvPath": {
         "title": "PKI Bridge Virtualenv Path",
         "type": "string",
+        "description": "Optional. Leave blank to use Homebridge storage (qolsys-bridge/.venv).",
         "default": "",
         "condition": {
           "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
@@ -79,6 +80,7 @@
       "BridgeConfigPath": {
         "title": "PKI Bridge Config Path",
         "type": "string",
+        "description": "Optional. Leave blank to use Homebridge storage (qolsys-bridge/config.json).",
         "default": "",
         "condition": {
           "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"

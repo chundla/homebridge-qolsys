@@ -62,8 +62,8 @@ This plugin supports two transport modes:
 * `BridgeEndpoint`: PKI bridge URL (default `http://127.0.0.1:9123`)
 * `BridgeAutoStart`: Auto-start the PKI bridge (creates venv, installs deps, runs bridge)
 * `BridgePythonPath`: Python executable for bridge (default `python3`)
-* `BridgeVenvPath`: Override venv location (optional)
-* `BridgeConfigPath`: Override bridge config path (optional)
+* `BridgeVenvPath`: Override venv location (optional). If blank, defaults to Homebridge storage (`qolsys-bridge/.venv`).
+* `BridgeConfigPath`: Override bridge config path (optional). If blank, defaults to Homebridge storage (`qolsys-bridge/config.json`).
 * `BridgePanelIp`: Panel IP for PKI pairing
 * `BridgePanelMac`: Panel MAC for PKI pairing
 * `BridgePluginIp`: IP of the Homebridge host running the bridge
@@ -137,6 +137,8 @@ If `BridgeAutoStart` is enabled, Homebridge will:
 - start the bridge
 - prompt you to press **Pair** on the IQ Remote config page
 - update `config.json` automatically once paired (sets `random_mac`, flips `start_pairing=false`)
+
+If `BridgeVenvPath` / `BridgeConfigPath` are left blank, they default to the Homebridge storage directory under `qolsys-bridge/`.
 
 ### Arming Limitations
 The Control4 interface on the IQ panels is intended as a local integration for Control4 remotes, as such this integration acts as a 'local' keypad. This means that when arming Away, by **default**, if no perimiter doors are opened the Auto Stay setting will trigger and the arming state will switch to Stay (Home). This setting can be disabled globally in the IQ panel, however disabling it increases the risk of triggereing alarms in the event Away is accidentaly selected while at home.

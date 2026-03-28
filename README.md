@@ -82,6 +82,13 @@ Prerequsite: On the latest Qolsys firmwaare 6 digit PIN codes must be enabled.
 ### PKI Bridge Setup (required for automation)
 A local bridge service runs `qolsys-controller` and exposes an HTTP API for Homebridge.
 See `bridge/README.md` for setup, pairing, and config.
+
+#### PKI Bridge Requirements
+- **Python 3** (3.9+ recommended)
+- **Python venv module** (needed for `python3 -m venv`)
+- **pip** (for installing bridge deps)
+
+> Debian/Ubuntu: `python3`, `python3-venv`, `python3-pip`
 - Settings
 - Advanced Settings
 - Enter Dealer Code (defaults to 2222)

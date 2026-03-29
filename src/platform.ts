@@ -55,8 +55,14 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
   private PanelSecureToken = '';
   private UserPinCode = '';
   private TransportMode = 'c4';
-  private BridgeEndpoint = 'http://127.0.0.1:9123';
+  private MqttUrl = 'mqtt://127.0.0.1:1883';
+  private MqttUsername = '';
+  private MqttPassword = '';
+  private MqttClientId = 'homebridge-qolsys';
+  private MqttStateTopic = 'qolsys/state';
+  private MqttCommandTopic = 'qolsys/command';
   private BridgeAutoStart = false;
+  private BridgeEndpoint = 'http://127.0.0.1:9123';
   private BridgePythonPath = 'python3';
   private BridgeVenvPath = '';
   private BridgeConfigPath = '';
@@ -124,11 +130,17 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
       return;
     }
 
-    this.Transport = new TransportManager(this.log, this.TransportMode as 'c4' | 'pki', {
+    this.Transport = new TransportManager(this.log, this.TransportMode as 'c4' | 'mqtt', {
       host: this.PanelHost,
       port: this.PanelPort,
       secureToken: this.PanelSecureToken,
       userPinCode: this.UserPinCode,
+      mqttUrl: this.MqttUrl,
+      mqttUsername: this.MqttUsername,
+      mqttPassword: this.MqttPassword,
+      mqttClientId: this.MqttClientId,
+      mqttStateTopic: this.MqttStateTopic,
+      mqttCommandTopic: this.MqttCommandTopic,
       bridgeEndpoint: this.BridgeEndpoint,
     });
     this.Controller = this.Transport.controller;
@@ -150,7 +162,7 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
     const SecureToken = this.config.SecureToken;
     const UserPinCode = this.config.UserPinCode;
     const TransportMode = this.config.TransportMode;
-    const BridgeEndpoint = this.config.BridgeEndpoint;
+    const MqttUrl = this.config.MqttUrl;
 
     if(Host === undefined || Host === ''){
       this.log.error('Aborting plugin operation - Invalid Host: ' + Host);
@@ -248,6 +260,10 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
       this.BridgeAutoStart = this.config.BridgeAutoStart;
     }
 
+    if(this.config.BridgeEndpoint !== undefined && this.config.BridgeEndpoint !== ''){
+      this.BridgeEndpoint = this.config.BridgeEndpoint;
+    }
+
     if(this.config.BridgePythonPath !== undefined && this.config.BridgePythonPath !== ''){
       this.BridgePythonPath = this.config.BridgePythonPath;
     }
@@ -309,15 +325,35 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
     }
 
     if(TransportMode !== undefined){
-      if(TransportMode !== 'c4' && TransportMode !== 'pki'){
+      if(TransportMode !== 'c4' && TransportMode !== 'mqtt'){
         this.log.warn('Invalid TransportMode value: ' + TransportMode + '. Falling back to c4.');
       } else{
         this.TransportMode = TransportMode;
       }
     }
 
-    if(BridgeEndpoint !== undefined && BridgeEndpoint !== ''){
-      this.BridgeEndpoint = BridgeEndpoint;
+    if(MqttUrl !== undefined && MqttUrl !== ''){
+      this.MqttUrl = MqttUrl;
+    }
+
+    if(this.config.MqttUsername !== undefined){
+      this.MqttUsername = this.config.MqttUsername;
+    }
+
+    if(this.config.MqttPassword !== undefined){
+      this.MqttPassword = this.config.MqttPassword;
+    }
+
+    if(this.config.MqttClientId !== undefined && this.config.MqttClientId !== ''){
+      this.MqttClientId = this.config.MqttClientId;
+    }
+
+    if(this.config.MqttStateTopic !== undefined && this.config.MqttStateTopic !== ''){
+      this.MqttStateTopic = this.config.MqttStateTopic;
+    }
+
+    if(this.config.MqttCommandTopic !== undefined && this.config.MqttCommandTopic !== ''){
+      this.MqttCommandTopic = this.config.MqttCommandTopic;
     }
 
     this.PanelHost = Host;
@@ -474,10 +510,12 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
       }
 
       // Start panel event notifications.
-      this.log.info('-----------------------------------------');
-      this.log.info('Starting Controller Operation');
-      this.log.info('-----------------------------------------');
-      this.Controller.StartOperation();
+      if (this.Transport.mode !== 'mqtt') {
+        this.log.info('-----------------------------------------');
+        this.log.info('Starting Controller Operation');
+        this.log.info('-----------------------------------------');
+        this.Controller.StartOperation();
+      }
     });
 
     this.Controller.on('PrintDebugInfo', (DebugString) => {
@@ -537,13 +575,6 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
     });
 
     // Start panel initialisation
-    if (this.TransportMode === 'pki' && this.BridgeAutoStart) {
-      this.ensureBridgeRunning();
-      this.waitForBridgeHealthThenConnect();
-      return;
-    }
-
-    this.ensureBridgeRunning();
     this.Transport.connect();
   }
 
@@ -558,6 +589,9 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
   }
 
   public SendAutomationCommand(command: QolsysAutomationCommand): void {
+    if (this.LogDebug) {
+      this.log.info(`[automation] send ${command.action} node=${command.virtualNodeId} endpoint=${command.endpoint}`);
+    }
     void this.Transport.sendAutomationCommand(command);
   }
 

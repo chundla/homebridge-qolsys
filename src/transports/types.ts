@@ -1,4 +1,4 @@
-export type QolsysTransportMode = 'c4' | 'pki';
+export type QolsysTransportMode = 'c4' | 'mqtt' | 'pki';
 
 import { BridgeStateSnapshot } from './bridgeTypes.js';
 import { QolsysAlarmMode } from '../QolsysPartition.js';
@@ -8,6 +8,12 @@ export interface QolsysTransportConfig {
   port: number;
   secureToken?: string;
   userPinCode?: string;
+  mqttUrl?: string;
+  mqttUsername?: string;
+  mqttPassword?: string;
+  mqttClientId?: string;
+  mqttStateTopic?: string;
+  mqttCommandTopic?: string;
   bridgeEndpoint?: string;
   onBridgeSnapshot?: (snapshot: BridgeStateSnapshot) => void;
 }

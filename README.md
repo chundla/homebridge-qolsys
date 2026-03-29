@@ -58,7 +58,15 @@ This plugin supports two transport modes:
 * `Force Arm`: Bypass open or faulted sensors when arming partition
 
 ### Transport Options
-* `TransportMode`: `c4` (legacy) or `pki` (bridge)
+* `TransportMode`: `c4` (legacy) or `mqtt` (recommended)
+* `MqttUrl`: MQTT broker URL (default `mqtt://127.0.0.1:1883`)
+* `MqttUsername`: MQTT broker username (optional)
+* `MqttPassword`: MQTT broker password (optional)
+* `MqttClientId`: MQTT client id (must be unique per broker)
+* `MqttStateTopic`: MQTT state topic (default `qolsys/state`)
+* `MqttCommandTopic`: MQTT command topic (default `qolsys/command`)
+
+#### PKI Bridge (legacy HTTP)
 * `BridgeEndpoint`: PKI bridge URL (default `http://127.0.0.1:9123`)
 * `BridgeAutoStart`: Auto-start the PKI bridge (creates venv, installs deps, runs bridge)
 * `BridgePythonPath`: Python executable for bridge (default `python3`)
@@ -79,7 +87,32 @@ As of version 0.4, Qolsys motion sensors can now be presented as motion or occup
 ## Qolsys Panel Configuration
 Prerequsite: On the latest Qolsys firmwaare 6 digit PIN codes must be enabled.
 
-### PKI Bridge Setup (required for automation)
+### MQTT Transport (recommended)
+Homebridge connects to an MQTT broker and consumes state snapshots published by `qolsys-controller`.
+Commands (arm/lock/etc) are published back on the command topic.
+
+**Broker quick start (Debian/Ubuntu):**
+```bash
+sudo apt-get update && sudo apt-get install -y mosquitto mosquitto-clients
+sudo systemctl enable --now mosquitto
+```
+
+**qolsys-controller bridge (CLI):**
+```bash
+python3 bin/qolsys.py \
+  --panel-ip <PANEL_IP> \
+  --plugin-ip <HOST_IP> \
+  --config-dir <CONFIG_DIR> \
+  --random-mac <PAIRED_RANDOM_MAC> \
+  --mqtt-bridge \
+  --mqtt-bridge-url mqtt://127.0.0.1:1883 \
+  --mqtt-bridge-state-topic qolsys/state \
+  --mqtt-bridge-command-topic qolsys/command
+```
+
+**Startup order:** start qolsys-controller **before** Homebridge so the MQTT bridge is already connected.
+
+### PKI Bridge Setup (legacy HTTP)
 A local bridge service runs `qolsys-controller` and exposes an HTTP API for Homebridge.
 See `bridge/README.md` for setup, pairing, and config.
 

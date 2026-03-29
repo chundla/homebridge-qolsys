@@ -49,6 +49,7 @@ export class HKAutomationLock extends HKAccessory {
   private handleSetTargetState(value: CharacteristicValue): void {
     const target = typeof value === 'number' ? value : Number(value);
     const action = target === this.platform.Characteristic.LockTargetState.SECURED ? 'lock' : 'unlock';
+    this.platform.log.info(`[lock] target=${target} action=${action} node=${this.virtualNodeId} endpoint=${this.endpoint}`);
     void this.platform.SendAutomationCommand({
       type: 'lock',
       action,

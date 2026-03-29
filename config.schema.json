@@ -40,16 +40,62 @@
         "default": "c4",
         "oneOf": [
           { "title": "Control4 Token (legacy/current)", "enum": ["c4"] },
-          { "title": "PKI Bridge (experimental)", "enum": ["pki"] }
+          { "title": "MQTT State + Command (PKI)", "enum": ["mqtt"] }
         ],
         "required": true
       },
-      "BridgeEndpoint": {
-        "title": "PKI Bridge Endpoint",
+      "MqttUrl": {
+        "title": "MQTT Broker URL",
         "type": "string",
-        "default": "http://127.0.0.1:9123",
+        "description": "Broker used by qolsys-controller MQTT bridge (ex: mqtt://127.0.0.1:1883)",
+        "default": "mqtt://127.0.0.1:1883",
         "condition": {
-          "functionBody": "return model.TransportMode === 'pki';"
+          "functionBody": "return model.TransportMode === 'mqtt';"
+        }
+      },
+      "MqttUsername": {
+        "title": "MQTT Username",
+        "type": "string",
+        "description": "Optional broker username",
+        "default": "",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'mqtt';"
+        }
+      },
+      "MqttPassword": {
+        "title": "MQTT Password",
+        "type": "string",
+        "description": "Optional broker password",
+        "default": "",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'mqtt';"
+        }
+      },
+      "MqttClientId": {
+        "title": "MQTT Client ID",
+        "type": "string",
+        "description": "Must be unique per broker connection",
+        "default": "homebridge-qolsys",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'mqtt';"
+        }
+      },
+      "MqttStateTopic": {
+        "title": "MQTT State Topic",
+        "type": "string",
+        "description": "State snapshots published by qolsys-controller",
+        "default": "qolsys/state",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'mqtt';"
+        }
+      },
+      "MqttCommandTopic": {
+        "title": "MQTT Command Topic",
+        "type": "string",
+        "description": "Commands published by Homebridge",
+        "default": "qolsys/command",
+        "condition": {
+          "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
       "BridgeAutoStart": {
@@ -220,7 +266,7 @@
         "title": "Show Automation Locks",
         "default": true,
         "condition": {
-          "functionBody": "return model.TransportMode === 'pki';"
+          "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
       "ShowAutomationLights": {
@@ -228,7 +274,7 @@
         "title": "Show Automation Lights",
         "default": true,
         "condition": {
-          "functionBody": "return model.TransportMode === 'pki';"
+          "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
       "ShowAutomationThermostats": {
@@ -236,7 +282,7 @@
         "title": "Show Automation Thermostats",
         "default": true,
         "condition": {
-          "functionBody": "return model.TransportMode === 'pki';"
+          "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
       "ShowAutomationCovers": {
@@ -244,7 +290,7 @@
         "title": "Show Automation Covers",
         "default": true,
         "condition": {
-          "functionBody": "return model.TransportMode === 'pki';"
+          "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
       "ShowAutomationSirens": {
@@ -252,7 +298,7 @@
         "title": "Show Automation Sirens",
         "default": true,
         "condition": {
-          "functionBody": "return model.TransportMode === 'pki';"
+          "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
       "ShowAutomationValves": {
@@ -260,7 +306,7 @@
         "title": "Show Automation Valves",
         "default": true,
         "condition": {
-          "functionBody": "return model.TransportMode === 'pki';"
+          "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
       "MotionSensorMode": {
@@ -332,15 +378,12 @@
           "expanded": true,
           "items": [
             "TransportMode",
-            "BridgeEndpoint",
-            "BridgeAutoStart",
-            "BridgePythonPath",
-            "BridgeVenvPath",
-            "BridgeConfigPath",
-            "BridgePanelIp",
-            "BridgePanelMac",
-            "BridgePluginIp",
-            "BridgeForceVenvRecreate"
+            "MqttUrl",
+            "MqttUsername",
+            "MqttPassword",
+            "MqttClientId",
+            "MqttStateTopic",
+            "MqttCommandTopic"
           ]
         },
         {

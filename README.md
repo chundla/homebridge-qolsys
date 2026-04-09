@@ -48,6 +48,24 @@ This plugin supports two transport modes:
 - Valves
 
 ## Homebridge Plugin Configuration
+### MQTT Bridge Overview
+When `TransportMode = mqtt`, Homebridge talks to the controller bridge topics under `qolsys_panel/v1/home/...` by default.
+The controller bridge publishes panel state, partition state, zone state, and automation-device state from the same root.
+
+Supported MQTT bridge capabilities:
+- Panel status/settings + panel commands
+- Partition state + arming/disarming commands
+- Zone state for motion, contact, water, heat/freeze, smoke, CO, glass break, and doorbell sensors
+- Automation devices for locks, lights, thermostats, covers/garage doors, sirens, and valves
+
+Configuration keys used by the bridge path:
+- `MqttBridgeRootTopic`: bridge root topic (default `qolsys`)
+- `MqttCaPath`: CA certificate path for the controller bridge
+- `BridgeEndpoint`: HTTP endpoint used for CA bootstrap and health checks
+- `MqttUrl`: MQTT broker URL used by the controller bridge
+- `MqttUsername` / `MqttPassword`: broker auth if enabled
+- `MqttClientId`: must be unique per broker
+
 ### General Parameters
 * `Host`:  Qolsys Panel IP address
 * `Port`:  Qolsys Panel Port number (defaults to 12345)
@@ -79,8 +97,9 @@ As of version 0.4, Qolsys motion sensors can now be presented as motion or occup
 Prerequsite: On the latest Qolsys firmwaare 6 digit PIN codes must be enabled.
 
 ### MQTT Bridge (recommended)
-Homebridge connects to an MQTT broker and consumes `qolsys-controller` bridge topics under `qolsys/v1/...`.
-Commands are published back on the matching bridge topics. Keep `MqttBridgeRootTopic` aligned with the controller bridge root, which defaults to `qolsys`.
+Homebridge connects to an MQTT broker and consumes `qolsys-controller` bridge topics under `<root>/v1/home/...`.
+By default that is `qolsys/v1/home/...`, and the controller side publishes the same root plus friendly name namespace.
+Commands are published back on the matching bridge topics. Keep `MqttBridgeRootTopic` aligned with the controller bridge root.
 
 **Broker quick start (Debian/Ubuntu):**
 ```bash
@@ -153,8 +172,8 @@ Once Control 4 is enabled you have **10 minutes** to view the access token, conf
 | Home | Arm Stay, Exit Delay in config file
 
 ### MQTT Bridge (automation)
-When `TransportMode = mqtt`, Homebridge talks to the controller bridge topics under `qolsys/v1/...` (or your configured `MqttBridgeRootTopic`).
-This enables automation devices (locks, lights, thermostat, cover/garage, siren, valve) in HomeKit.
+When `TransportMode = mqtt`, Homebridge talks to the controller bridge topics under `<MqttBridgeRootTopic>/v1/home/...`.
+This enables automation devices (locks, lights, thermostat, cover/garage, siren, valve) in HomeKit, plus live zone and partition state sync.
 
 `BridgeEndpoint` is only used for CA bootstrap and health checks.
 

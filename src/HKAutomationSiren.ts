@@ -22,7 +22,11 @@ export class HKAutomationSiren extends HKAccessory {
       .setCharacteristic(this.platform.Characteristic.Model, 'Qolsys Siren')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, `AutDev${device.virtualNodeId}:${this.endpoint}`);
 
-    this.service = this.AddService(this.platform.Service.Switch, `Siren - ${device.name}`, `Siren-${device.virtualNodeId}-${this.endpoint}`);
+    this.service = this.AddService(
+      this.platform.Service.Switch,
+      `Siren - ${device.name}`,
+      `Siren-${device.virtualNodeId}-${this.endpoint}`,
+    );
 
     this.service.getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.handleSetOn.bind(this));

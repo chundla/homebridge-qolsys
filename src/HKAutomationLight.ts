@@ -24,7 +24,11 @@ export class HKAutomationLight extends HKAccessory {
       .setCharacteristic(this.platform.Characteristic.Model, 'Qolsys Light')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, `AutDev${device.virtualNodeId}:${this.endpoint}`);
 
-    this.service = this.AddService(this.platform.Service.Lightbulb, `Light - ${device.name}`, `Light-${device.virtualNodeId}-${this.endpoint}`);
+    this.service = this.AddService(
+      this.platform.Service.Lightbulb,
+      `Light - ${device.name}`,
+      `Light-${device.virtualNodeId}-${this.endpoint}`,
+    );
 
     this.service.getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.handleSetOn.bind(this));

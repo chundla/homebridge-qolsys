@@ -77,13 +77,13 @@ Configuration keys used by the bridge path:
 
 ### Transport Options
 * `TransportMode`: `c4` (legacy) or `mqtt` (MQTT Bridge)
-* `MqttUrl`: MQTT broker URL used by the controller bridge (default `mqtt://127.0.0.1:1883`)
+* `MqttUrl`: MQTT broker URL used by the controller bridge (default `mqtt://127.0.0.1:1883`, but `mqtts://` or `wss://` is strongly recommended)
 * `MqttUsername`: MQTT broker username (optional)
 * `MqttPassword`: MQTT broker password (optional)
 * `MqttClientId`: MQTT client id (must be unique per broker)
 * `MqttBridgeRootTopic`: MQTT bridge root topic (default `qolsys`)
-* `MqttCaPath`: CA certificate path for the MQTT bridge
-* `BridgeEndpoint`: HTTP endpoint used for CA bootstrap and health checks (default `http://127.0.0.1:9123`)
+* `MqttCaPath`: optional CA certificate path for the MQTT bridge TLS connection
+* `BridgeEndpoint`: bridge API endpoint used for CA bootstrap and health checks (default `http://127.0.0.1:9123`). Use `https://` for remote endpoints; `http://` is intended for localhost only.
 
 ### Motion Sensors
 As of version 0.4, Qolsys motion sensors can now be presented as motion or occupancy sensors with a user selectable option in Homebridge UI. The available options are:
@@ -100,6 +100,8 @@ Prerequsite: On the latest Qolsys firmwaare 6 digit PIN codes must be enabled.
 Homebridge connects to an MQTT broker and consumes `qolsys-controller` bridge topics under `<root>/v1/home/...`.
 By default that is `qolsys/v1/home/...`, and the controller side publishes the same root plus friendly name namespace.
 Commands are published back on the matching bridge topics. Keep `MqttBridgeRootTopic` aligned with the controller bridge root.
+
+If `MqttUrl` uses TLS (`mqtts://` or `wss://`) and `MqttCaPath` is unset, Homebridge will try to bootstrap the bridge CA from `<BridgeEndpoint>/mqtt-bridge/ca` and cache it under Homebridge storage (`qolsys-ca/mqtt_bridge_ca.cer`).
 
 **Broker quick start (Debian/Ubuntu):**
 ```bash
@@ -175,7 +177,7 @@ Once Control 4 is enabled you have **10 minutes** to view the access token, conf
 When `TransportMode = mqtt`, Homebridge talks to the controller bridge topics under `<MqttBridgeRootTopic>/v1/home/...`.
 This enables automation devices (locks, lights, thermostat, cover/garage, siren, valve) in HomeKit, plus live zone and partition state sync.
 
-`BridgeEndpoint` is only used for CA bootstrap and health checks.
+`BridgeEndpoint` is only used for CA bootstrap and health checks. For security, remote endpoints should use `https://`; plaintext `http://` bootstrap is intended for loopback/local deployments.
 
 ### Arming Limitations
 The Control4 interface on the IQ panels is intended as a local integration for Control4 remotes, as such this integration acts as a 'local' keypad. This means that when arming Away, by **default**, if no perimiter doors are opened the Auto Stay setting will trigger and the arming state will switch to Stay (Home). This setting can be disabled globally in the IQ panel, however disabling it increases the risk of triggereing alarms in the event Away is accidentaly selected while at home.

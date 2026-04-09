@@ -22,7 +22,11 @@ export class HKAutomationLock extends HKAccessory {
       .setCharacteristic(this.platform.Characteristic.Model, 'Qolsys Lock')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, `AutDev${device.virtualNodeId}:${this.endpoint}`);
 
-    this.service = this.AddService(this.platform.Service.LockMechanism, `Lock - ${device.name}`, `Lock-${device.virtualNodeId}-${this.endpoint}`);
+    this.service = this.AddService(
+      this.platform.Service.LockMechanism,
+      `Lock - ${device.name}`,
+      `Lock-${device.virtualNodeId}-${this.endpoint}`,
+    );
 
     this.service.getCharacteristic(this.platform.Characteristic.LockTargetState)
       .onSet(this.handleSetTargetState.bind(this));

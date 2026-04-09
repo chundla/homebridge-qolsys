@@ -8,7 +8,7 @@ export class HKAutomationThermostat extends HKAccessory {
   private readonly virtualNodeId: number;
   private readonly endpoint: number;
   private temperatureUnit: string | undefined;
-  private targetMode: number = 0;
+  private targetMode = 0;
 
   constructor(
     protected readonly platform: HBQolsysPanel,
@@ -24,7 +24,11 @@ export class HKAutomationThermostat extends HKAccessory {
       .setCharacteristic(this.platform.Characteristic.Model, 'Qolsys Thermostat')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, `AutDev${device.virtualNodeId}:${this.endpoint}`);
 
-    this.service = this.AddService(this.platform.Service.Thermostat, `Thermostat - ${device.name}`, `Thermostat-${device.virtualNodeId}-${this.endpoint}`);
+    this.service = this.AddService(
+      this.platform.Service.Thermostat,
+      `Thermostat - ${device.name}`,
+      `Thermostat-${device.virtualNodeId}-${this.endpoint}`,
+    );
 
     this.service.getCharacteristic(this.platform.Characteristic.TargetHeatingCoolingState)
       .onSet(this.handleSetTargetMode.bind(this));

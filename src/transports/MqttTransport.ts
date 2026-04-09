@@ -47,28 +47,50 @@ export class MqttTransport implements QolsysTransport {
   }
 
   private async connectAsync(): Promise<void> {
-    if (!this.config.mqttUrl) {
+    const mqttUrl = this.config.mqttUrl?.trim();
+    if (!mqttUrl) {
       this.log.error('TransportMode=mqtt selected but MqttUrl is not configured.');
       return;
     }
 
-    const options: IClientOptions = {
-      username: this.config.mqttUsername,
-      password: this.config.mqttPassword,
-      clientId: this.config.mqttClientId,
-      reconnectPeriod: 5000,
-    };
-
-    const caPath = await this.resolveCaPath();
-    if (caPath) {
-      options.ca = readFileSync(caPath);
-      options.rejectUnauthorized = true;
+    const brokerUrl = this.parseUrl(mqttUrl, 'MqttUrl');
+    if (!brokerUrl) {
+      return;
     }
 
-    this.client = mqtt.connect(this.config.mqttUrl, options);
+    const usesTls = brokerUrl.protocol === 'mqtts:' || brokerUrl.protocol === 'wss:';
+    const username = this.config.mqttUsername?.trim();
+    const password = this.config.mqttPassword;
+    const clientId = this.config.mqttClientId?.trim();
+
+    if (!usesTls) {
+      this.log.warn(
+        `MQTT transport is using ${brokerUrl.protocol || 'an unknown protocol'} (non-TLS). `
+        + 'Use mqtts:// or wss:// with a CA certificate when possible.',
+      );
+      if (username || password) {
+        this.log.warn('MQTT username/password are configured over non-TLS transport and may be exposed in transit.');
+      }
+    }
+
+    const options: IClientOptions = {
+      username: username || undefined,
+      password: password && password.length > 0 ? password : undefined,
+      clientId: clientId || undefined,
+      reconnectPeriod: 5000,
+      connectTimeout: 10000,
+      rejectUnauthorized: usesTls,
+    };
+
+    const caPath = await this.resolveCaPath(usesTls);
+    if (caPath) {
+      options.ca = readFileSync(caPath);
+    }
+
+    this.client = mqtt.connect(mqttUrl, options);
 
     this.client.on('connect', () => {
-      this.log.info('Connected to MQTT broker at ' + this.config.mqttUrl);
+      this.log.info('Connected to MQTT broker at ' + mqttUrl);
 
       const bridgeWildcard = `${this.bridgeBaseTopic}/v1/+/#`;
       this.client?.subscribe(bridgeWildcard, (error) => {
@@ -81,10 +103,20 @@ export class MqttTransport implements QolsysTransport {
     });
 
     this.client.on('message', (topic, payload) => {
+      if (payload.length > 1024 * 1024) {
+        this.log.warn(`Ignoring oversized MQTT payload on topic ${topic} (${payload.length} bytes).`);
+        return;
+      }
+
       try {
+        const parsedTopic = this.parseBridgeTopic(topic);
+        if (!parsedTopic) {
+          return;
+        }
+
         const raw = JSON.parse(payload.toString());
 
-        if (this.handleBridgeTopicMessage(topic, raw)) {
+        if (this.handleBridgeTopicMessage(raw, parsedTopic)) {
           this.controller.ApplyBridgeSnapshot(this.buildSnapshotFromBridgeCache());
         }
       } catch (error) {
@@ -102,25 +134,44 @@ export class MqttTransport implements QolsysTransport {
     });
   }
 
-  private async resolveCaPath(): Promise<string | undefined> {
+  private async resolveCaPath(usesTls: boolean): Promise<string | undefined> {
+    if (!usesTls) {
+      return undefined;
+    }
+
     const configuredPath = this.config.mqttCaPath?.trim();
-    if (configuredPath && existsSync(configuredPath)) {
-      return configuredPath;
+    if (configuredPath) {
+      if (existsSync(configuredPath)) {
+        this.log.info('Using MQTT CA certificate from MqttCaPath: ' + configuredPath);
+        return configuredPath;
+      }
+      this.log.warn('MqttCaPath is set but file was not found: ' + configuredPath);
     }
 
     const bootstrapPath = this.localCaPath ?? path.resolve(process.cwd(), 'qolsys-ca', 'mqtt_bridge_ca.cer');
     if (existsSync(bootstrapPath)) {
+      this.log.info('Using cached MQTT bridge CA certificate: ' + bootstrapPath);
       return bootstrapPath;
     }
 
     const endpoint = this.config.bridgeEndpoint ?? 'http://127.0.0.1:9123';
+    if (!this.isAllowedBootstrapEndpoint(endpoint)) {
+      this.log.warn(
+        'Refusing MQTT CA bootstrap from non-local HTTP BridgeEndpoint. '
+        + 'Use https:// for remote endpoints or keep http:// on localhost only.',
+      );
+      return undefined;
+    }
+
     const ca = await this.fetchBootstrapCa(endpoint);
     if (!ca) {
+      this.log.warn('MQTT bridge CA bootstrap failed. TLS connection will fall back to system trust store.');
       return undefined;
     }
 
     mkdirSync(path.dirname(bootstrapPath), { recursive: true });
-    writeFileSync(bootstrapPath, ca);
+    writeFileSync(bootstrapPath, ca, { mode: 0o600 });
+    this.log.info('Cached MQTT bridge CA certificate at ' + bootstrapPath);
     return bootstrapPath;
   }
 
@@ -138,7 +189,15 @@ export class MqttTransport implements QolsysTransport {
 
         const chunks: Buffer[] = [];
         res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-        res.on('end', () => resolve(Buffer.concat(chunks)));
+        res.on('end', () => {
+          const ca = Buffer.concat(chunks);
+          if (ca.length === 0 || ca.length > 256 * 1024) {
+            resolve(undefined);
+            return;
+          }
+
+          resolve(ca);
+        });
       });
 
       req.setTimeout(3000, () => {
@@ -236,12 +295,10 @@ export class MqttTransport implements QolsysTransport {
     this.controller.ApplyBridgeSnapshot(snapshot);
   }
 
-  private handleBridgeTopicMessage(topic: string, payload: unknown): boolean {
-    const parsed = this.parseBridgeTopic(topic);
-    if (!parsed) {
-      return false;
-    }
-
+  private handleBridgeTopicMessage(
+    payload: unknown,
+    parsed: { baseTopic: string; kind: 'partition' | 'zone' | 'automation'; entityId?: number },
+  ): boolean {
     this.bridgeBaseTopic = parsed.baseTopic;
 
     if (parsed.kind === 'partition') {
@@ -288,6 +345,11 @@ export class MqttTransport implements QolsysTransport {
     const parts = topic.split('/').filter((item) => item.length > 0);
     const versionIndex = parts.indexOf('v1');
     if (versionIndex < 1 || versionIndex + 3 >= parts.length) {
+      return undefined;
+    }
+
+    const finalSegment = parts[parts.length - 1]?.toLowerCase();
+    if (finalSegment === 'command' || finalSegment === 'set') {
       return undefined;
     }
 
@@ -750,5 +812,32 @@ export class MqttTransport implements QolsysTransport {
       .filter((item) => item.length > 0);
 
     return items.length > 0 ? items : undefined;
+  }
+
+  private parseUrl(value: string, label: string): URL | undefined {
+    try {
+      return new URL(value);
+    } catch {
+      this.log.error(`Invalid ${label}: ${value}`);
+      return undefined;
+    }
+  }
+
+  private isAllowedBootstrapEndpoint(value: string): boolean {
+    const endpoint = this.parseUrl(value, 'BridgeEndpoint');
+    if (!endpoint) {
+      return false;
+    }
+
+    if (endpoint.protocol === 'https:') {
+      return true;
+    }
+
+    if (endpoint.protocol !== 'http:') {
+      return false;
+    }
+
+    const host = endpoint.hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
   }
 }

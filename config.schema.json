@@ -47,7 +47,7 @@
       "MqttUrl": {
         "title": "MQTT Broker URL",
         "type": "string",
-        "description": "Broker used by qolsys-controller MQTT bridge (ex: mqtt://127.0.0.1:1883)",
+        "description": "Broker used by qolsys-controller MQTT bridge (prefer mqtts:// or wss:// when available)",
         "default": "mqtt://127.0.0.1:1883",
         "condition": {
           "functionBody": "return model.TransportMode === 'mqtt';"
@@ -92,7 +92,7 @@
       "MqttCaPath": {
         "title": "MQTT CA Certificate Path",
         "type": "string",
-        "description": "Path to the QolsysController MQTT bridge CA certificate",
+        "description": "Optional CA certificate path for MQTT TLS. If empty, the plugin can bootstrap and cache the bridge CA from BridgeEndpoint.",
         "default": "",
         "condition": {
           "functionBody": "return model.TransportMode === 'mqtt';"
@@ -101,7 +101,7 @@
       "BridgeEndpoint": {
         "title": "Bridge API Endpoint",
         "type": "string",
-        "description": "HTTP endpoint used for bridge health/CA bootstrap (default: http://127.0.0.1:9123)",
+        "description": "Bridge API endpoint used for health and CA bootstrap. Use https:// for remote endpoints; http:// is intended for localhost only.",
         "default": "http://127.0.0.1:9123",
         "condition": {
           "functionBody": "return model.TransportMode === 'mqtt';"

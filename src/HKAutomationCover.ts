@@ -22,7 +22,11 @@ export class HKAutomationCover extends HKAccessory {
       .setCharacteristic(this.platform.Characteristic.Model, 'Qolsys Garage Door')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, `AutDev${device.virtualNodeId}:${this.endpoint}`);
 
-    this.service = this.AddService(this.platform.Service.GarageDoorOpener, `Garage Door - ${device.name}`, `Garage-${device.virtualNodeId}-${this.endpoint}`);
+    this.service = this.AddService(
+      this.platform.Service.GarageDoorOpener,
+      `Garage Door - ${device.name}`,
+      `Garage-${device.virtualNodeId}-${this.endpoint}`,
+    );
 
     this.service.getCharacteristic(this.platform.Characteristic.TargetDoorState)
       .onSet(this.handleSetTargetState.bind(this));

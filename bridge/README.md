@@ -1,9 +1,10 @@
-# Qolsys PKI Bridge (homebridge-qolsys)
+# Legacy Qolsys PKI Bridge (homebridge-qolsys)
 
-This bridge runs the Python `qolsys-controller` and exposes a small HTTP API for Homebridge.
+This helper runs the Python `qolsys-controller` and exposes the old HTTP API used by the legacy PKI transport.
+The main plugin path is the MQTT bridge.
 
 ## Why
-Homebridge can only speak the legacy Control4 API directly. PKI/MQTT features require `qolsys-controller`, which is Python. This bridge isolates that into a local service.
+Homebridge can only speak the legacy Control4 API directly. PKI features need `qolsys-controller`, which is Python. This helper isolates that into a local service.
 
 ## API
 - `GET /health` → `{ connected, paired, panel_ip, random_mac }`
@@ -24,7 +25,7 @@ Homebridge can only speak the legacy Control4 API directly. PKI/MQTT features re
 
 ## Setup
 ```bash
-cd /mnt/ssd/source/homebridge-qolsys/bridge
+cd bridge
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -36,4 +37,4 @@ python3 app.py --config config.json
 ## Notes
 - Pairing is handled by `qolsys-controller`. Set `start_pairing` to `true` for initial pairing.
 - `config_dir` must be writable; it stores PKI keys/certs and panel state.
-- Homebridge config should point `BridgeEndpoint` to this service (default `http://127.0.0.1:9123`).
+- Homebridge config should point `BridgeEndpoint` to this service only when using the legacy PKI transport (default `http://127.0.0.1:9123`).

@@ -6,9 +6,9 @@
 This plugin supports two transport modes:
 
 - **Control4 (legacy)**: basic security features only.
-- **PKI Bridge (recommended)**: full state sync + automation devices via `qolsys-controller`.
+- **MQTT Bridge (recommended)**: full state sync + automation devices via `qolsys-controller`.
 
-| Feature | Control4 | PKI Bridge |
+| Feature | Control4 | MQTT Bridge |
 | --- | --- | --- |
 | Arming/Disarming | ✅ | ✅ |
 | RF + wired sensors | ✅ | ✅ |
@@ -39,7 +39,7 @@ This plugin supports two transport modes:
 - Glass Break and Panel Glass Break
 - IQ Doorbell sensor
 
-## Supported Automation Devices (PKI Bridge)
+## Supported Automation Devices (MQTT Bridge)
 - Locks
 - Lights (on/off + level)
 - Thermostats (mode + setpoints + fan)
@@ -47,7 +47,7 @@ This plugin supports two transport modes:
 - Sirens
 - Valves
 
-## Homebride Pluging Configuration
+## Homebridge Plugin Configuration
 ### General Parameters
 * `Host`:  Qolsys Panel IP address
 * `Port`:  Qolsys Panel Port number (defaults to 12345)
@@ -58,24 +58,15 @@ This plugin supports two transport modes:
 * `Force Arm`: Bypass open or faulted sensors when arming partition
 
 ### Transport Options
-* `TransportMode`: `c4` (legacy) or `mqtt` (recommended)
-* `MqttUrl`: MQTT broker URL (default `mqtt://127.0.0.1:1883`)
+* `TransportMode`: `c4` (legacy) or `mqtt` (MQTT Bridge)
+* `MqttUrl`: MQTT broker URL used by the controller bridge (default `mqtt://127.0.0.1:1883`)
 * `MqttUsername`: MQTT broker username (optional)
 * `MqttPassword`: MQTT broker password (optional)
 * `MqttClientId`: MQTT client id (must be unique per broker)
-* `MqttStateTopic`: MQTT state topic (default `qolsys/state`)
-* `MqttCommandTopic`: MQTT command topic (default `qolsys/command`)
+* `MqttBridgeRootTopic`: MQTT bridge root topic (default `qolsys`)
+* `MqttCaPath`: CA certificate path for the MQTT bridge
+* `BridgeEndpoint`: HTTP endpoint used for CA bootstrap and health checks (default `http://127.0.0.1:9123`)
 
-#### PKI Bridge (legacy HTTP)
-* `BridgeEndpoint`: PKI bridge URL (default `http://127.0.0.1:9123`)
-* `BridgeAutoStart`: Auto-start the PKI bridge (creates venv, installs deps, runs bridge)
-* `BridgePythonPath`: Python executable for bridge (default `python3`)
-* `BridgeVenvPath`: Override venv location (optional). If blank, defaults to Homebridge storage (`qolsys-bridge/.venv`).
-* `BridgeConfigPath`: Override bridge config path (optional). If blank, defaults to Homebridge storage (`qolsys-bridge/config.json`).
-* `BridgePanelIp`: Panel IP for PKI pairing
-* `BridgePanelMac`: Panel MAC for PKI pairing
-* `BridgePluginIp`: IP of the Homebridge host running the bridge
-* `BridgeForceVenvRecreate`: Rebuild venv on next boot
 ### Motion Sensors
 As of version 0.4, Qolsys motion sensors can now be presented as motion or occupancy sensors with a user selectable option in Homebridge UI. The available options are:
 - Motion sensor only
@@ -87,9 +78,9 @@ As of version 0.4, Qolsys motion sensors can now be presented as motion or occup
 ## Qolsys Panel Configuration
 Prerequsite: On the latest Qolsys firmwaare 6 digit PIN codes must be enabled.
 
-### MQTT Transport (recommended)
-Homebridge connects to an MQTT broker and consumes state snapshots published by `qolsys-controller`.
-Commands (arm/lock/etc) are published back on the command topic.
+### MQTT Bridge (recommended)
+Homebridge connects to an MQTT broker and consumes `qolsys-controller` bridge topics under `qolsys/v1/...`.
+Commands are published back on the matching bridge topics. Keep `MqttBridgeRootTopic` aligned with the controller bridge root, which defaults to `qolsys`.
 
 **Broker quick start (Debian/Ubuntu):**
 ```bash
@@ -105,15 +96,13 @@ python3 bin/qolsys.py \
   --config-dir <CONFIG_DIR> \
   --random-mac <PAIRED_RANDOM_MAC> \
   --mqtt-bridge \
-  --mqtt-bridge-url mqtt://127.0.0.1:1883 \
-  --mqtt-bridge-state-topic qolsys/state \
-  --mqtt-bridge-command-topic qolsys/command
+  --mqtt-bridge-url mqtt://127.0.0.1:1883
 ```
 
 **Startup order:** start qolsys-controller **before** Homebridge so the MQTT bridge is already connected.
 
-### PKI Bridge Setup (legacy HTTP)
-A local bridge service runs `qolsys-controller` and exposes an HTTP API for Homebridge.
+### Legacy PKI Bridge Setup
+A local bridge service can still expose the older HTTP API for the legacy PKI transport.
 See `bridge/README.md` for setup, pairing, and config.
 
 #### PKI Bridge Requirements
@@ -163,22 +152,11 @@ Once Control 4 is enabled you have **10 minutes** to view the access token, conf
 | Away | Arm Away, Exit Delay in config file
 | Home | Arm Stay, Exit Delay in config file
 
-### PKI Bridge (automation)
-When `TransportMode = pki`, Homebridge talks to a local bridge service that runs `qolsys-controller` and exposes:
-- `GET /health`
-- `GET /state`
-- `POST /command`
-
+### MQTT Bridge (automation)
+When `TransportMode = mqtt`, Homebridge talks to the controller bridge topics under `qolsys/v1/...` (or your configured `MqttBridgeRootTopic`).
 This enables automation devices (locks, lights, thermostat, cover/garage, siren, valve) in HomeKit.
 
-If `BridgeAutoStart` is enabled, Homebridge will:
-- create a venv (once)
-- install Python deps (cached via a stamp)
-- start the bridge
-- prompt you to press **Pair** on the IQ Remote config page
-- update `config.json` automatically once paired (sets `random_mac`, flips `start_pairing=false`)
-
-If `BridgeVenvPath` / `BridgeConfigPath` are left blank, they default to the Homebridge storage directory under `qolsys-bridge/`.
+`BridgeEndpoint` is only used for CA bootstrap and health checks.
 
 ### Arming Limitations
 The Control4 interface on the IQ panels is intended as a local integration for Control4 remotes, as such this integration acts as a 'local' keypad. This means that when arming Away, by **default**, if no perimiter doors are opened the Auto Stay setting will trigger and the arming state will switch to Stay (Home). This setting can be disabled globally in the IQ panel, however disabling it increases the risk of triggereing alarms in the event Away is accidentaly selected while at home.
@@ -189,7 +167,7 @@ The plugin supports direct transions with the following configurations:
 - If Arm Stay Exit Delay is set to 0, panel will allow a direct transition from Arm_Amay to Arm_Stay 
 
 ### Tips
-There are few things to be aware of in reguard to how HomeKit currenlty (iOS 16.0) represents security sensors.
+There are a few things to be aware of regarding how HomeKit currently (iOS 16.0) represents security sensors.
 If a room only contains sensors, and no controllable devices, it won't display the room in the Home View. This includes the Default room created for newly added devices after initial bridge enrollment. Such rooms are still selectable from the list of rooms to view. When viewing any specific room you can see its associated sensors. A summary of all currently triggered sensors will be displayed when the Security category is selected in Home View. Sensors that aren't triggered won't display in the summary, so if you have no activity the summary will be empty. This behaviour is different from the summarys for Lights or Speakers & TV, which will show devices independent of state.  When viwing the Security Summary, if multiple sensors of the same type are triggered selecting the sensor type will show a list of the triggered sensors. 
 
 If you add sensors after the initial enrollment of the hub they will be added to a room named Default. For this reason it is generally a good idea to either add the HomeBridge to HomeKit after configuration of the plugin OR run the plugin as a child bridge and add it to HomeKit after you have confirmed proper configuration. The advantage of this approach is that when the bridge is added after the plugin is configured, HomeKit will present dialogs for each sensor allowing correct placement in each room as well as selection of display icon. While tedious, this approach is a simpler process to assign sensors to the correct room. If you don't follow this approach or add sensors later, they will be added to the Default room with default icon representation. Sensors can be moved to a different room, and the representative icon change, from the Settings similar to any other HomeKit device. The easist way to find any errant sensors is "Home Settings" -> "Home Hubs & Bridges" -> select either Homebridge or the Qolsys child bridge -> Accessories, this provides a view of all sensors that are directly part of the bridge. 

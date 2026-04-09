@@ -5,6 +5,7 @@ import { MqttTransport } from './MqttTransport.js';
 import {
   QolsysArmCommand,
   QolsysAutomationCommand,
+  QolsysPanelCommand,
   QolsysTransport,
   QolsysTransportConfig,
   QolsysTransportMode,
@@ -64,6 +65,15 @@ export class TransportManager {
     }
 
     this.log.warn('Automation commands require MQTT transport. Ignoring command: ' + command.action);
+  }
+
+  async sendPanelCommand(command: QolsysPanelCommand): Promise<void> {
+    if (this.activeTransport.sendPanelCommand) {
+      await this.activeTransport.sendPanelCommand(command);
+      return;
+    }
+
+    this.log.warn('Panel commands require MQTT transport. Ignoring command: ' + command.command);
   }
 
   connect(): void {

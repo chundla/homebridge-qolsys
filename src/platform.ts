@@ -1,16 +1,11 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
-import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import http from 'http';
-import https from 'https';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 import { QolsysController, QolsysControllerError } from './QolsysController.js';
 import { TransportManager } from './transports/TransportManager.js';
 import { QolsysAutomationCommand } from './transports/types.js';
 import { QolsysZone, QolsysZoneStatus, QolsysZoneType} from './QolsysZone.js';
-import { QolsysAlarmMode} from './QolsysPartition.js';
+import { QolsysAlarmMode, QolsysPartition } from './QolsysPartition.js';
 import { HKSecurityPanel } from './HKSecurityPanel.js';
 import { HKContactSensor } from './HKContactSensor.js';
 import { HKLeakSensor } from './HKLeakSensor.js';
@@ -59,25 +54,13 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
   private MqttUsername = '';
   private MqttPassword = '';
   private MqttClientId = 'homebridge-qolsys';
-  private MqttStateTopic = 'qolsys/state';
-  private MqttCommandTopic = 'qolsys/command';
-  private BridgeAutoStart = false;
+  private MqttCaPath = '';
+  private MqttBridgeRootTopic = 'qolsys';
   private BridgeEndpoint = 'http://127.0.0.1:9123';
-  private BridgePythonPath = 'python3';
-  private BridgeVenvPath = '';
-  private BridgeConfigPath = '';
-  private BridgeForceVenvRecreate = false;
-  private BridgePanelIp = '';
-  private BridgePanelMac = '';
-  private BridgePluginIp = '';
-  private BridgeProcess?: ChildProcessWithoutNullStreams;
-  private BridgeDepsReady = false;
-  private BridgePairingTimer?: NodeJS.Timeout;
-  private BridgePairingLastLog?: number;
-  private BridgeHealthTimer?: NodeJS.Timeout;
   public readonly Controller: QolsysController;
   private readonly Transport: TransportManager;
 
+  private Partitions: Record<number, HKSecurityPanel> = {};
   private Zones:Record<number, HKSensor> = {};
   private AutomationAccessories: Record<string, HKAutomationAccessory | undefined> = {};
   private InitialRun = true;
@@ -93,9 +76,7 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
   private ShowTilt = true;
   private ShowDoorbell = true;
   private ShowFreeze = true;
-  private ShowBluetooth = false;
   private ShowGlassBreak = false;
-  private ShowTakeover = false;
   private ShowAutomationLocks = true;
   private ShowAutomationLights = true;
   private ShowAutomationThermostats = true;
@@ -139,9 +120,10 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
       mqttUsername: this.MqttUsername,
       mqttPassword: this.MqttPassword,
       mqttClientId: this.MqttClientId,
-      mqttStateTopic: this.MqttStateTopic,
-      mqttCommandTopic: this.MqttCommandTopic,
+      mqttCaPath: this.MqttCaPath,
+      mqttBridgeRootTopic: this.MqttBridgeRootTopic,
       bridgeEndpoint: this.BridgeEndpoint,
+      mqttBootstrapCaPath: path.resolve(this.api.user.storagePath(), 'qolsys-ca', 'mqtt_bridge_ca.cer'),
     });
     this.Controller = this.Transport.controller;
 
@@ -212,7 +194,7 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
       this.ShowLeak = this.config.ShowLeak;
     }
 
-    if(this.config.Tilt !== undefined){
+    if(this.config.ShowTilt !== undefined){
       this.ShowTilt = this.config.ShowTilt;
     }
 
@@ -256,40 +238,8 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
       this.LogPartition = this.config.LogPartition;
     }
 
-    if(this.config.BridgeAutoStart !== undefined){
-      this.BridgeAutoStart = this.config.BridgeAutoStart;
-    }
-
     if(this.config.BridgeEndpoint !== undefined && this.config.BridgeEndpoint !== ''){
       this.BridgeEndpoint = this.config.BridgeEndpoint;
-    }
-
-    if(this.config.BridgePythonPath !== undefined && this.config.BridgePythonPath !== ''){
-      this.BridgePythonPath = this.config.BridgePythonPath;
-    }
-
-    if(this.config.BridgeVenvPath !== undefined){
-      this.BridgeVenvPath = this.config.BridgeVenvPath;
-    }
-
-    if(this.config.BridgeConfigPath !== undefined){
-      this.BridgeConfigPath = this.config.BridgeConfigPath;
-    }
-
-    if(this.config.BridgeForceVenvRecreate !== undefined){
-      this.BridgeForceVenvRecreate = this.config.BridgeForceVenvRecreate;
-    }
-
-    if(this.config.BridgePanelIp !== undefined){
-      this.BridgePanelIp = this.config.BridgePanelIp;
-    }
-
-    if(this.config.BridgePanelMac !== undefined){
-      this.BridgePanelMac = this.config.BridgePanelMac;
-    }
-
-    if(this.config.BridgePluginIp !== undefined){
-      this.BridgePluginIp = this.config.BridgePluginIp;
     }
 
     if(this.config.LogZone !== undefined){
@@ -348,12 +298,12 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
       this.MqttClientId = this.config.MqttClientId;
     }
 
-    if(this.config.MqttStateTopic !== undefined && this.config.MqttStateTopic !== ''){
-      this.MqttStateTopic = this.config.MqttStateTopic;
+    if(typeof this.config.MqttCaPath === 'string' && this.config.MqttCaPath !== ''){
+      this.MqttCaPath = this.config.MqttCaPath;
     }
 
-    if(this.config.MqttCommandTopic !== undefined && this.config.MqttCommandTopic !== ''){
-      this.MqttCommandTopic = this.config.MqttCommandTopic;
+    if(this.config.MqttBridgeRootTopic !== undefined && this.config.MqttBridgeRootTopic !== ''){
+      this.MqttBridgeRootTopic = this.config.MqttBridgeRootTopic;
     }
 
     this.PanelHost = Host;
@@ -364,17 +314,25 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
     return true;
   }
 
+  private CreatePartition(Partition: QolsysPartition): boolean {
+    if (!this.ShowSecurityPanel) {
+      this.log.info('Partition' + Partition.PartitionId + ': Skipped in config file');
+      return false;
+    }
+
+    this.Partitions[Partition.PartitionId] = new HKSecurityPanel(
+      this,
+      Partition.PartitionId,
+      Partition.PartitionName,
+      'QolsysPartition' + Partition.PartitionId,
+    );
+    return true;
+  }
+
   private DiscoverPartitions(){
     for(const PartitionId in this.Controller.GetPartitions()){
-
       const Partition = this.Controller.GetPartitions()[PartitionId];
-
-      if(!this.ShowSecurityPanel){
-        this.log.info('Partition' + Partition.PartitionId + ': Skipped in config file');
-        continue;
-      }
-
-      new HKSecurityPanel(this, Partition.PartitionId, Partition.PartitionName, 'QolsysPartition' + Partition.PartitionId);
+      this.CreatePartition(Partition);
     }
   }
 
@@ -485,11 +443,19 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
 
   private DeviceCacheCleanUp(){
     // Do some cleanup of point that have been restored and are not in config file anymore
+    const createdAccessoryUUIDs = new Set(this.CreatedAccessories.map((accessory) => accessory.UUID));
+    const removedAccessories: string[] = [];
     for(let i = 0; i < this.accessories.length;i++){
-      if(this.CreatedAccessories.indexOf(this.accessories[i]) === -1){
+      if(!createdAccessoryUUIDs.has(this.accessories[i].UUID)){
+        removedAccessories.push(this.accessories[i].displayName);
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [this.accessories[i]]);
       }
     }
+
+    if (removedAccessories.length > 0) {
+      this.log.info('Removed stale accessories: ' + removedAccessories.join(', '));
+    }
+    this.log.info('Created accessories: ' + this.CreatedAccessories.length + ', cached accessories: ' + this.accessories.length);
   }
 
   discoverDevices() {
@@ -505,7 +471,11 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
         this.DiscoverPartitions();
         this.DiscoverZones();
         this.DiscoverAutomationDevices();
-        this.DeviceCacheCleanUp();
+        if (this.Transport.mode !== 'mqtt') {
+          this.DeviceCacheCleanUp();
+        } else {
+          this.log.info('Skipping accessory cache cleanup in MQTT mode to avoid dropping late-discovered sensors.');
+        }
         this.InitialRun = false;
       }
 
@@ -534,6 +504,10 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
         this.log.debug(msg);
       }
 
+      if (this.Zones[Zone.ZoneId] === undefined) {
+        this.CreateSensor(Zone);
+      }
+
       const Sensor = this.Zones[Zone.ZoneId];
       if(Sensor !== undefined){
         Sensor.HandleEventDetected(Zone.ZoneStatus);
@@ -550,6 +524,10 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
         this.log.info(msg);
       } else{
         this.log.debug(msg);
+      }
+
+      if (this.Partitions[Partition.PartitionId] === undefined) {
+        this.CreatePartition(Partition);
       }
     });
 
@@ -595,483 +573,126 @@ export class HBQolsysPanel implements DynamicPlatformPlugin {
     void this.Transport.sendAutomationCommand(command);
   }
 
-  private ensureBridgeRunning(): void {
-    if (this.TransportMode !== 'pki' || !this.BridgeAutoStart) {
-      return;
-    }
-
-    if (this.BridgeProcess) {
-      return;
-    }
-
-    const storagePath = this.api.user.storagePath();
-    const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-    const bridgeDir = path.resolve(rootDir, 'bridge');
-    const venvPath = this.BridgeVenvPath && this.BridgeVenvPath.length > 0
-      ? this.BridgeVenvPath
-      : path.resolve(storagePath, 'qolsys-bridge', '.venv');
-    const configPath = this.BridgeConfigPath && this.BridgeConfigPath.length > 0
-      ? this.BridgeConfigPath
-      : path.resolve(storagePath, 'qolsys-bridge', 'config.json');
-    const pythonExecutable = this.BridgePythonPath || 'python3';
-    const venvPython = path.resolve(venvPath, 'bin', 'python');
-    const requirementsPath = path.resolve(bridgeDir, 'requirements.txt');
-    const appPath = path.resolve(bridgeDir, 'app.py');
-
-    try {
-      fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    } catch (error) {
-      this.log.error('Failed to create bridge config directory: ' + (error as Error).message);
-      return;
-    }
-
-    if (!fs.existsSync(configPath)) {
-      this.log.warn('BridgeAutoStart is enabled but config.json is missing: ' + configPath);
-      if (!this.writeBridgeConfig(configPath)) {
-        this.log.warn('Create the bridge config file first; auto-start skipped.');
-        return;
-      }
-      this.log.info('Created bridge config template at ' + configPath);
-    }
-
-    if (this.BridgeForceVenvRecreate && fs.existsSync(venvPath)) {
-      this.log.warn('BridgeForceVenvRecreate enabled. Removing venv at ' + venvPath);
-      fs.rmSync(venvPath, { recursive: true, force: true });
-    }
-
-    if (!fs.existsSync(venvPython)) {
-      this.log.info('Creating bridge venv at ' + venvPath);
-      const create = spawn(pythonExecutable, ['-m', 'venv', venvPath]);
-      create.on('exit', (code) => {
-        if (code !== 0) {
-          this.log.error('Failed to create bridge venv (exit ' + code + ')');
-          return;
-        }
-        this.installBridgeDeps(venvPython, requirementsPath, appPath, configPath, venvPath);
-      });
-      return;
-    }
-
-    if (this.BridgeDepsReady) {
-      this.startBridgeProcess(venvPython, appPath, configPath);
-      return;
-    }
-
-    if (this.isBridgeDepsUpToDate(venvPath, requirementsPath)) {
-      this.BridgeDepsReady = true;
-      this.startBridgeProcess(venvPython, appPath, configPath);
-      return;
-    }
-
-    this.installBridgeDeps(venvPython, requirementsPath, appPath, configPath, venvPath);
-  }
-
-  private installBridgeDeps(venvPython: string, requirementsPath: string, appPath: string, configPath: string, venvPath: string): void {
-    this.log.info('Ensuring bridge dependencies are installed.');
-    const pip = spawn(venvPython, ['-m', 'pip', 'install', '-r', requirementsPath]);
-    pip.stdout.on('data', (data) => this.log.debug('[bridge][pip] ' + data.toString().trim()));
-    pip.stderr.on('data', (data) => this.log.warn('[bridge][pip] ' + data.toString().trim()));
-    pip.on('exit', (code) => {
-      if (code !== 0) {
-        this.log.error('Bridge dependency install failed (exit ' + code + ')');
-        return;
-      }
-      this.BridgeDepsReady = true;
-      this.writeBridgeDepsStamp(venvPath, requirementsPath);
-      this.startBridgeProcess(venvPython, appPath, configPath);
-    });
-  }
-
-  private bridgeStampPath(venvPath: string): string {
-    return path.resolve(venvPath, '.deps-stamp');
-  }
-
-  private writeBridgeConfig(configPath: string): boolean {
-    try {
-      const payload = {
-        panel_ip: this.BridgePanelIp || this.PanelHost || '',
-        panel_mac: this.BridgePanelMac || '',
-        random_mac: '',
-        config_dir: path.dirname(configPath),
-        plugin_ip: this.BridgePluginIp || '',
-        auto_discover_pki: false,
-        start_pairing: true,
-        check_user_code_on_arm: false,
-        check_user_code_on_disarm: false,
-        log_mqtt_messages: false,
-        http_host: '127.0.0.1',
-        http_port: 9123,
-      };
-      fs.writeFileSync(configPath, JSON.stringify(payload, null, 2), 'utf-8');
-      return true;
-    } catch (error) {
-      this.log.error('Failed to write bridge config: ' + (error as Error).message);
-      return false;
-    }
-  }
-
-  private isBridgeDepsUpToDate(venvPath: string, requirementsPath: string): boolean {
-    try {
-      const stampPath = this.bridgeStampPath(venvPath);
-      if (!fs.existsSync(stampPath)) {
-        return false;
-      }
-      const stamp = fs.readFileSync(stampPath, 'utf-8').trim();
-      const requirements = fs.readFileSync(requirementsPath, 'utf-8').trim();
-      return stamp === requirements;
-    } catch (error) {
-      this.log.warn('Bridge dependency stamp check failed: ' + (error as Error).message);
-      return false;
-    }
-  }
-
-  private writeBridgeDepsStamp(venvPath: string, requirementsPath: string): void {
-    try {
-      const stampPath = this.bridgeStampPath(venvPath);
-      const requirements = fs.readFileSync(requirementsPath, 'utf-8').trim();
-      fs.writeFileSync(stampPath, requirements, 'utf-8');
-    } catch (error) {
-      this.log.warn('Failed to write bridge dependency stamp: ' + (error as Error).message);
-    }
-  }
-
-  private startBridgeProcess(venvPython: string, appPath: string, configPath: string): void {
-    this.log.info('Starting PKI bridge process...');
-    this.BridgeProcess = spawn(venvPython, [appPath, '--config', configPath], { env: process.env });
-
-    this.BridgeProcess.stdout.on('data', (data) => this.log.info('[bridge] ' + data.toString().trim()));
-    this.BridgeProcess.stderr.on('data', (data) => this.log.warn('[bridge] ' + data.toString().trim()));
-
-    this.BridgeProcess.on('exit', (code) => {
-      this.log.warn('PKI bridge exited (code ' + code + ').');
-      this.BridgeProcess = undefined;
-      if (this.BridgePairingTimer) {
-        clearInterval(this.BridgePairingTimer);
-        this.BridgePairingTimer = undefined;
-      }
-      if (this.BridgeHealthTimer) {
-        clearInterval(this.BridgeHealthTimer);
-        this.BridgeHealthTimer = undefined;
-      }
-    });
-
-    this.api.on('shutdown', () => {
-      if (this.BridgeProcess) {
-        this.log.info('Stopping PKI bridge process...');
-        this.BridgeProcess.kill('SIGTERM');
-        this.BridgeProcess = undefined;
-      }
-      if (this.BridgePairingTimer) {
-        clearInterval(this.BridgePairingTimer);
-        this.BridgePairingTimer = undefined;
-      }
-      if (this.BridgeHealthTimer) {
-        clearInterval(this.BridgeHealthTimer);
-        this.BridgeHealthTimer = undefined;
-      }
-    });
-
-    this.startBridgePairingMonitor(configPath);
-  }
-
-  private startBridgePairingMonitor(configPath: string): void {
-    if (this.BridgePairingTimer) {
-      return;
-    }
-
-    this.BridgePairingTimer = setInterval(() => {
-      this.checkBridgePairing(configPath);
-    }, 15000);
-
-    this.checkBridgePairing(configPath);
-  }
-
-  private waitForBridgeHealthThenConnect(): void {
-    if (this.BridgeHealthTimer) {
-      return;
-    }
-
-    this.BridgeHealthTimer = setInterval(() => {
-      this.checkBridgeHealth(() => {
-        if (this.BridgeHealthTimer) {
-          clearInterval(this.BridgeHealthTimer);
-          this.BridgeHealthTimer = undefined;
-        }
-        this.Transport.connect();
-      });
-    }, 5000);
-
-    this.checkBridgeHealth(() => {
-      if (this.BridgeHealthTimer) {
-        clearInterval(this.BridgeHealthTimer);
-        this.BridgeHealthTimer = undefined;
-      }
-      this.Transport.connect();
-    });
-  }
-
-  private checkBridgeHealth(onHealthy: () => void): void {
-    const healthUrl = new URL('/health', this.BridgeEndpoint);
-    const client = healthUrl.protocol === 'https:' ? https : http;
-
-    const req = client.get(healthUrl.toString(), (res) => {
-      let raw = '';
-      res.setEncoding('utf8');
-      res.on('data', (chunk) => {
-        raw += chunk;
-      });
-      res.on('end', () => {
-        if (res.statusCode !== 200) {
-          return;
-        }
-        try {
-          const payload = JSON.parse(raw);
-          if (payload && payload.connected) {
-            onHealthy();
-          }
-        } catch (error) {
-          // ignore
-        }
-      });
-    });
-
-    req.on('error', () => {
-      // ignore
-    });
-  }
-
-  private checkBridgePairing(configPath: string): void {
-    let config: any;
-    try {
-      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    } catch (error) {
-      this.log.warn('Bridge pairing check failed to read config: ' + (error as Error).message);
-      return;
-    }
-
-    if (!config.start_pairing) {
-      return;
-    }
-
-    const now = Date.now();
-    if (!this.BridgePairingLastLog || now - this.BridgePairingLastLog > 60000) {
-      this.log.info('PKI pairing required — press Pair on the IQ Remote config page.');
-      this.BridgePairingLastLog = now;
-    }
-
-    const healthUrl = new URL('/health', this.BridgeEndpoint);
-    const client = healthUrl.protocol === 'https:' ? https : http;
-
-    const req = client.get(healthUrl.toString(), (res) => {
-      let raw = '';
-      res.setEncoding('utf8');
-      res.on('data', (chunk) => {
-        raw += chunk;
-      });
-      res.on('end', () => {
-        if (res.statusCode !== 200) {
-          return;
-        }
-        try {
-          const payload = JSON.parse(raw);
-          if (payload && payload.paired) {
-            if (payload.random_mac) {
-              config.random_mac = payload.random_mac;
-            }
-            config.start_pairing = false;
-            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-            this.log.info('PKI pairing complete. Bridge config updated.');
-          }
-        } catch (error) {
-          this.log.warn('Bridge pairing check failed to parse health response.');
-        }
-      });
-    });
-
-    req.on('error', () => {
-      // ignore
-    });
-  }
 
   private CreateSensor(Zone:QolsysZone):boolean{
 
     switch(Zone.ZoneType){
-
-      case QolsysZoneType.Motion:{
-
-        if(this.ShowMotion){
-
-          if(this.MotionSensorMode === 'Motion'){
-            this.Zones[Zone.ZoneId] = new HKMotionOccupancySensor(this, Zone.ZoneId, Zone.ZoneName,
-              'QolsysZone' + Zone.ZoneType + Zone.ZoneId, true, false);
-          }
-
-          if(this.MotionSensorMode === 'Occupancy'){
-            this.Zones[Zone.ZoneId] = new HKMotionOccupancySensor(this, Zone.ZoneId, Zone.ZoneName,
-              'QolsysZone' + Zone.ZoneType + Zone.ZoneId, false, true);
-          }
-
-          if(this.MotionSensorMode === 'MotionOccupancy'){
-            this.Zones[Zone.ZoneId] = new HKMotionOccupancySensor(this, Zone.ZoneId, Zone.ZoneName,
-              'QolsysZone' + Zone.ZoneType + Zone.ZoneId, true, true);
-          }
-
-          return true;
-
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
+      case QolsysZoneType.Motion:
+      case QolsysZoneType.PanelMotion:
+      case QolsysZoneType.Unknow:{
+        if(!this.ShowMotion){
+          this.log.info('Zone' + Zone.ZoneId + ': Motion sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
+
+        if(this.MotionSensorMode === 'Motion'){
+          this.Zones[Zone.ZoneId] = new HKMotionOccupancySensor(this, Zone.ZoneId, Zone.ZoneName,
+            'QolsysZone' + Zone.ZoneType + Zone.ZoneId, true, false);
+        } else if(this.MotionSensorMode === 'Occupancy'){
+          this.Zones[Zone.ZoneId] = new HKMotionOccupancySensor(this, Zone.ZoneId, Zone.ZoneName,
+            'QolsysZone' + Zone.ZoneType + Zone.ZoneId, false, true);
+        } else {
+          this.Zones[Zone.ZoneId] = new HKMotionOccupancySensor(this, Zone.ZoneId, Zone.ZoneName,
+            'QolsysZone' + Zone.ZoneType + Zone.ZoneId, true, true);
+        }
+
+        return true;
       }
 
-      case QolsysZoneType.PanelMotion:{
-        if(this.ShowMotion){
-
-          if(this.MotionSensorMode === 'Motion'){
-            this.Zones[Zone.ZoneId] = new HKMotionOccupancySensor(this, Zone.ZoneId, Zone.ZoneName,
-              'QolsysZone' + Zone.ZoneType + Zone.ZoneId, true, false);
-          }
-
-          if(this.MotionSensorMode === 'Occupancy'){
-            this.Zones[Zone.ZoneId] = new HKMotionOccupancySensor(this, Zone.ZoneId, Zone.ZoneName,
-              'QolsysZone' + Zone.ZoneType + Zone.ZoneId, false, true);
-          }
-
-          if(this.MotionSensorMode === 'MotionOccupancy'){
-            this.Zones[Zone.ZoneId] = new HKMotionOccupancySensor(this, Zone.ZoneId, Zone.ZoneName,
-              'QolsysZone' + Zone.ZoneType + Zone.ZoneId, true, true);
-          }
-
-          return true;
-
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
+      case QolsysZoneType.DoorWindow:
+        if(!this.ShowContact){
+          this.log.info('Zone' + Zone.ZoneId + ': Contact sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.DoorWindow:{
-        if(this.ShowContact){
-          this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
+        this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
+
+      case QolsysZoneType.GlassBreak:
+      case QolsysZoneType.PanelGlassBreak:
+        if(!this.ShowGlassBreak){
+          this.log.info('Zone' + Zone.ZoneId + ': Glass break sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.Water :{
-        if(this.ShowLeak){
-          this.Zones[Zone.ZoneId] = new HKLeakSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
+        this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
+
+      case QolsysZoneType.TakeoverModule:
+      case QolsysZoneType.Bluetooth:
+        if(!this.ShowContact){
+          this.log.info('Zone' + Zone.ZoneId + ': Contact sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.SmokeDetector :{
-        if(this.ShowSmoke){
-          this.Zones[Zone.ZoneId] = new HKSmokeSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
+        this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
+
+      case QolsysZoneType.Tilt:
+        if(!this.ShowTilt){
+          this.log.info('Zone' + Zone.ZoneId + ': Tilt sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.Heat :{
-        if(this.ShowHeat){
-          this.Zones[Zone.ZoneId] = new HKSmokeSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
+        this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
+
+      case QolsysZoneType.Freeze:
+        if(!this.ShowFreeze){
+          this.log.info('Zone' + Zone.ZoneId + ': Freeze sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.CODetector :{
-        if(this.ShowCO){
-          this.Zones[Zone.ZoneId] = new HKCOSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
+        this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
+
+      case QolsysZoneType.Water:
+        if(!this.ShowLeak){
+          this.log.info('Zone' + Zone.ZoneId + ': Leak sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.Bluetooth :{
-        if(this.ShowBluetooth){
-          this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': No HomeKit plugin available - ' + QolsysZoneType[Zone.ZoneType]);
+        this.Zones[Zone.ZoneId] = new HKLeakSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
+
+      case QolsysZoneType.SmokeDetector:
+        if(!this.ShowSmoke){
+          this.log.info('Zone' + Zone.ZoneId + ': Smoke sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.GlassBreak :{
-        if(this.ShowGlassBreak){
-          this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
+        this.Zones[Zone.ZoneId] = new HKSmokeSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
+
+      case QolsysZoneType.Heat:
+        if(!this.ShowHeat){
+          this.log.info('Zone' + Zone.ZoneId + ': Heat sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.PanelGlassBreak :{
-        if(this.ShowGlassBreak){
-          this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
+        this.Zones[Zone.ZoneId] = new HKSmokeSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
+
+      case QolsysZoneType.CODetector:
+        if(!this.ShowCO){
+          this.log.info('Zone' + Zone.ZoneId + ': CO sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.TakeoverModule :{
-        if(this.ShowTakeover){
-          this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': No HomeKit plugin available - ' + QolsysZoneType[Zone.ZoneType]);
+        this.Zones[Zone.ZoneId] = new HKCOSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
+
+      case QolsysZoneType.Doorbell:
+        if(!this.ShowDoorbell){
+          this.log.info('Zone' + Zone.ZoneId + ': Doorbell sensor disabled - ' + QolsysZoneType[Zone.ZoneType]);
           return false;
         }
-      }
 
-      case QolsysZoneType.Tilt :{
-        if(this.ShowTilt){
-          this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
-          return false;
-        }
-      }
-
-      case QolsysZoneType.Doorbell:{
-        if(this.ShowDoorbell){
-          this.Zones[Zone.ZoneId] = new HKDoorbellSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
-          return false;
-        }
-      }
-
-      case QolsysZoneType.Freeze :{
-        if(this.ShowFreeze){
-          this.Zones[Zone.ZoneId] = new HKContactSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
-          return true;
-        } else{
-          this.log.info('Zone' + Zone.ZoneId + ': Skipped in config file - ' + QolsysZoneType[Zone.ZoneType]);
-          return false;
-        }
-      }
+        this.Zones[Zone.ZoneId] = new HKDoorbellSensor(this, Zone.ZoneId, Zone.ZoneName, 'QolsysZone' + Zone.ZoneType + Zone.ZoneId);
+        return true;
 
       default:
-        this.log.info('Zone' + Zone.ZoneId + ': No HomeKit plugin available - ' + QolsysZoneType[Zone.ZoneType]);
+        this.log.info('Zone' + Zone.ZoneId + ': No HomeKit mapping for - ' + QolsysZoneType[Zone.ZoneType]);
         return false;
     }
   }

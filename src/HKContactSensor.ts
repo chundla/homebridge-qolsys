@@ -21,6 +21,16 @@ export class HKContactSensor extends HKSensor {
       .setCharacteristic(this.platform.Characteristic.Model, 'HK Contact Sensor')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, 'QolsysZone' + ZoneId);
 
+    const MotionService = this.Accessory.getService(this.platform.Service.MotionSensor);
+    if (MotionService) {
+      this.Accessory.removeService(MotionService);
+    }
+
+    const OccupancyService = this.Accessory.getService(this.platform.Service.OccupancySensor);
+    if (OccupancyService) {
+      this.Accessory.removeService(OccupancyService);
+    }
+
     this.service = this.Accessory.getService(this.platform.Service.ContactSensor)
     || this.Accessory.addService(this.platform.Service.ContactSensor);
   }

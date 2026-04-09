@@ -39,8 +39,8 @@
         "type": "string",
         "default": "c4",
         "oneOf": [
-          { "title": "Control4 Token (legacy/current)", "enum": ["c4"] },
-          { "title": "MQTT State + Command (PKI)", "enum": ["mqtt"] }
+          { "title": "Control4 Token (legacy)", "enum": ["c4"] },
+          { "title": "MQTT Bridge", "enum": ["mqtt"] }
         ],
         "required": true
       },
@@ -80,88 +80,31 @@
           "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
-      "MqttStateTopic": {
-        "title": "MQTT State Topic",
+      "MqttBridgeRootTopic": {
+        "title": "MQTT Bridge Root Topic",
         "type": "string",
-        "description": "State snapshots published by qolsys-controller",
-        "default": "qolsys/state",
+        "description": "Root topic used by qolsys-controller mqtt_bridge (default: qolsys)",
+        "default": "qolsys",
         "condition": {
           "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
-      "MqttCommandTopic": {
-        "title": "MQTT Command Topic",
+      "MqttCaPath": {
+        "title": "MQTT CA Certificate Path",
         "type": "string",
-        "description": "Commands published by Homebridge",
-        "default": "qolsys/command",
+        "description": "Path to the QolsysController MQTT bridge CA certificate",
+        "default": "",
         "condition": {
           "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
-      "BridgeAutoStart": {
-        "title": "Auto-start PKI Bridge",
-        "type": "boolean",
-        "default": false,
-        "condition": {
-          "functionBody": "return model.TransportMode === 'pki';"
-        }
-      },
-      "BridgePythonPath": {
-        "title": "PKI Bridge Python Executable",
+      "BridgeEndpoint": {
+        "title": "Bridge API Endpoint",
         "type": "string",
-        "default": "python3",
+        "description": "HTTP endpoint used for bridge health/CA bootstrap (default: http://127.0.0.1:9123)",
+        "default": "http://127.0.0.1:9123",
         "condition": {
-          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
-        }
-      },
-      "BridgeVenvPath": {
-        "title": "PKI Bridge Virtualenv Path",
-        "type": "string",
-        "description": "Optional. Leave blank to use Homebridge storage (qolsys-bridge/.venv).",
-        "default": "",
-        "condition": {
-          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
-        }
-      },
-      "BridgeConfigPath": {
-        "title": "PKI Bridge Config Path",
-        "type": "string",
-        "description": "Optional. Leave blank to use Homebridge storage (qolsys-bridge/config.json).",
-        "default": "",
-        "condition": {
-          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
-        }
-      },
-      "BridgePanelIp": {
-        "title": "PKI Panel IP",
-        "type": "string",
-        "default": "",
-        "condition": {
-          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
-        }
-      },
-      "BridgePanelMac": {
-        "title": "PKI Panel MAC",
-        "type": "string",
-        "default": "",
-        "condition": {
-          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
-        }
-      },
-      "BridgePluginIp": {
-        "title": "PKI Bridge Host IP",
-        "type": "string",
-        "default": "",
-        "condition": {
-          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
-        }
-      },
-      "BridgeForceVenvRecreate": {
-        "title": "PKI Bridge Force Venv Recreate",
-        "type": "boolean",
-        "default": false,
-        "condition": {
-          "functionBody": "return model.TransportMode === 'pki' && model.BridgeAutoStart === true;"
+          "functionBody": "return model.TransportMode === 'mqtt';"
         }
       },
       "ForceArm":{
@@ -382,8 +325,9 @@
             "MqttUsername",
             "MqttPassword",
             "MqttClientId",
-            "MqttStateTopic",
-            "MqttCommandTopic"
+            "MqttBridgeRootTopic",
+            "MqttCaPath",
+            "BridgeEndpoint"
           ]
         },
         {

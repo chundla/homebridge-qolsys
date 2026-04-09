@@ -39,10 +39,12 @@ export class HKSecurityPanel extends HKAccessory {
     ];
 
     this.service.getCharacteristic(this.platform.api.hap.Characteristic.SecuritySystemCurrentState)
-      .setProps({ validValues: ValidCurrentStates});
+      .setProps({ validValues: ValidCurrentStates})
+      .onGet(this.handleSecuritySystemCurrentStateGet.bind(this));
 
     this.service.getCharacteristic(this.platform.api.hap.Characteristic.SecuritySystemTargetState)
-      .setProps({ validValues: ValidTargetStates});
+      .setProps({ validValues: ValidTargetStates})
+      .onGet(this.handleSecuritySystemTargetStateGet.bind(this));
 
     this.service.getCharacteristic(this.platform.Characteristic.SecuritySystemTargetState)
       .onSet(this.handleSecuritySystemTargetStateSet.bind(this));
@@ -67,9 +69,19 @@ export class HKSecurityPanel extends HKAccessory {
   }
 
   handleSecuritySystemTargetStateSet(value) {
+    const Partition = this.platform.Controller.GetPartitions()[this.PartitionId];
 
     switch(value){
       case this.platform.Characteristic.SecuritySystemTargetState.DISARM:{
+        if (Partition?.PartitionStatus === QolsysAlarmMode.DISARM) {
+          this.service.getCharacteristic(this.platform.Characteristic.SecuritySystemCurrentState)
+            .updateValue(this.platform.Characteristic.SecuritySystemCurrentState.DISARMED);
+          this.service.getCharacteristic(this.platform.Characteristic.SecuritySystemTargetState)
+            .updateValue(this.platform.Characteristic.SecuritySystemTargetState.DISARM);
+          this.platform.log.info(`Partition${this.PartitionId} already disarmed, skipping disarm command.`);
+          return;
+        }
+
         this.platform.SendArmCommand(QolsysAlarmMode.DISARM, this.PartitionId, 0, true);
         break;
       }
@@ -96,9 +108,39 @@ export class HKSecurityPanel extends HKAccessory {
     }
   }
 
+  private handleSecuritySystemCurrentStateGet() {
+    const Partition = this.getPartition();
+
+    if (!Partition) {
+      return this.platform.Characteristic.SecuritySystemCurrentState.DISARMED;
+    }
+
+    if (Partition.PartitionStatus === QolsysAlarmMode.ALARM_AUXILIARY ||
+      Partition.PartitionStatus === QolsysAlarmMode.ALARM_FIRE ||
+      Partition.PartitionStatus === QolsysAlarmMode.ALARM_POLICE) {
+      return this.platform.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED;
+    }
+
+    return this.QolsysPartitionStatusToCurrentHKStatus(Partition.PartitionStatus);
+  }
+
+  private handleSecuritySystemTargetStateGet() {
+    const Partition = this.getPartition();
+
+    if (!Partition) {
+      return this.platform.Characteristic.SecuritySystemTargetState.DISARM;
+    }
+
+    return this.QolsysPartitionStatusToTargetHKStatus(Partition.PartitionStatus);
+  }
+
+  private getPartition() {
+    return this.platform.Controller.GetPartitions()[this.PartitionId];
+  }
+
   private QolsysPartitionStatusToCurrentHKStatus(Status: QolsysAlarmMode){
 
-    const PreviousStatus = this.platform.Controller.GetPartitions()[this.PartitionId].PartitionPreviousStatus;
+    const PreviousStatus = this.platform.Controller.GetPartitions()[this.PartitionId]?.PartitionPreviousStatus ?? QolsysAlarmMode.Unknow;
 
     switch(Status){
       case QolsysAlarmMode.EXIT_DELAY:

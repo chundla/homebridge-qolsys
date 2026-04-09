@@ -12,8 +12,9 @@ export interface QolsysTransportConfig {
   mqttUsername?: string;
   mqttPassword?: string;
   mqttClientId?: string;
-  mqttStateTopic?: string;
-  mqttCommandTopic?: string;
+  mqttCaPath?: string;
+  mqttBootstrapCaPath?: string;
+  mqttBridgeRootTopic?: string;
   bridgeEndpoint?: string;
   onBridgeSnapshot?: (snapshot: BridgeStateSnapshot) => void;
 }
@@ -24,6 +25,16 @@ export interface QolsysArmCommand {
   delay: number;
   bypass: boolean;
   userCode?: string;
+}
+
+export type QolsysPanelCommandType = 'execute_scene' | 'trigger_police' | 'trigger_auxilliary' | 'trigger_fire' | 'speak';
+
+export interface QolsysPanelCommand {
+  command: QolsysPanelCommandType;
+  partitionId?: number;
+  sceneId?: number;
+  silent?: boolean;
+  text?: string;
 }
 
 export type QolsysAutomationCommandType = 'light' | 'lock' | 'cover' | 'siren' | 'valve' | 'thermostat';
@@ -42,6 +53,8 @@ export interface QolsysAutomationCommand {
     | 'siren_off'
     | 'valve_open'
     | 'valve_close'
+    | 'valve_stop'
+    | 'valve_position'
     | 'thermostat_mode'
     | 'thermostat_fan_mode'
     | 'thermostat_heat'
@@ -59,4 +72,5 @@ export interface QolsysTransport {
   disconnect(): void;
   sendArmCommand?: (command: QolsysArmCommand) => Promise<void>;
   sendAutomationCommand?: (command: QolsysAutomationCommand) => Promise<void>;
+  sendPanelCommand?: (command: QolsysPanelCommand) => Promise<void>;
 }

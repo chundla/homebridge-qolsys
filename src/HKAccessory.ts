@@ -15,6 +15,11 @@ export abstract class HKAccessory {
       let accessory = this.platform.accessories.find(accessory => accessory.UUID === uuid);
       if(accessory){
         this.platform.api.updatePlatformAccessories([accessory]);
+        for (const service of accessory.services) {
+          if (service.UUID !== this.platform.Service.AccessoryInformation.UUID) {
+            accessory.removeService(service);
+          }
+        }
       } else{
         accessory = new this.platform.api.platformAccessory(this.Name, uuid);
         this.platform.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
